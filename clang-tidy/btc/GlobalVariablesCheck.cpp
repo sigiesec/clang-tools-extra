@@ -28,8 +28,11 @@ void GlobalVariablesCheck::check(const MatchFinder::MatchResult &Result) {
     // It is not part of a class or is a public static field.
     if (!MatchedVarDecl->isStaticLocal()) {
       // and it is not a static local variable.
-      // At this point I hope it must be a global variable.
-      diag(MatchedVarDecl->getLocStart(), "Global variable detected.");
+      if (!MatchedVarDecl->getType().isConstQualified()) {
+	// and it is not a constant...
+        // At this point I hope it must be a global variable.
+        diag(MatchedVarDecl->getLocStart(), "Global variable detected.");
+      }
     }
   }
 }
