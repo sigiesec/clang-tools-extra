@@ -62,6 +62,7 @@ private:
   void
   onDocumentRangeFormatting(DocumentRangeFormattingParams &Params) override;
   void onDocumentFormatting(DocumentFormattingParams &Params) override;
+  void onDocumentSymbol(DocumentSymbolParams &Params) override;
   void onCodeAction(CodeActionParams &Params) override;
   void onCompletion(TextDocumentPositionParams &Params) override;
   void onSignatureHelp(TextDocumentPositionParams &Params) override;
@@ -81,6 +82,7 @@ private:
   /// may be very expensive.  This method is normally called when the
   /// compilation database is changed.
   void reparseOpenedFiles();
+  void applyConfiguration(const ClangdConfigurationParamsChange &Settings);
 
   JSONOutput &Out;
   /// Used to indicate that the 'shutdown' request was received from the

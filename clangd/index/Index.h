@@ -30,6 +30,9 @@ struct SymbolLocation {
     uint32_t Line = 0; // 0-based
     // Using UTF-16 code units.
     uint32_t Column = 0; // 0-based
+    bool operator==(const Position& P) const {
+      return Line == P.Line && Column == P.Column;
+    }
   };
 
   // The URI of the source file where a symbol occurs.
@@ -39,7 +42,11 @@ struct SymbolLocation {
   Position Start;
   Position End;
 
-  operator bool() const { return !FileURI.empty(); }
+  explicit operator bool() const { return !FileURI.empty(); }
+  bool operator==(const SymbolLocation& Loc) const {
+    return std::tie(FileURI, Start, End) ==
+           std::tie(Loc.FileURI, Loc.Start, Loc.End);
+  }
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const SymbolLocation &);
 
@@ -117,6 +124,30 @@ template <> struct DenseMapInfo<clang::clangd::SymbolID> {
 namespace clang {
 namespace clangd {
 
+// Describes the source of information about a symbol.
+// Mainly useful for debugging, e.g. understanding code completion reuslts.
+// This is a bitfield as information can be combined from several sources.
+enum class SymbolOrigin : uint8_t {
+  Unknown = 0,
+  AST = 1 << 0,     // Directly from the AST (indexes should not set this).
+  Dynamic = 1 << 1, // From the dynamic index of opened files.
+  Static = 1 << 2,  // From the static, externally-built index.
+  Merge = 1 << 3,   // A non-trivial index merge was performed.
+  // Remaining bits reserved for index implementations.
+};
+inline SymbolOrigin operator|(SymbolOrigin A, SymbolOrigin B) {
+  return static_cast<SymbolOrigin>(static_cast<uint8_t>(A) |
+                                   static_cast<uint8_t>(B));
+}
+inline SymbolOrigin &operator|=(SymbolOrigin &A, SymbolOrigin B) {
+  return A = A | B;
+}
+inline SymbolOrigin operator&(SymbolOrigin A, SymbolOrigin B) {
+  return static_cast<SymbolOrigin>(static_cast<uint8_t>(A) &
+                                   static_cast<uint8_t>(B));
+}
+raw_ostream &operator<<(raw_ostream &, SymbolOrigin);
+
 // The class presents a C++ symbol, e.g. class, function.
 //
 // WARNING: Symbols do not own much of their underlying data - typically strings
@@ -157,6 +188,8 @@ struct Symbol {
   /// Whether or not this symbol is meant to be used for the code completion.
   /// See also isIndexedForCodeCompletion().
   bool IsIndexedForCodeCompletion = false;
+  /// Where this symbol came from. Usually an index provides a constant value.
+  SymbolOrigin Origin = SymbolOrigin::Unknown;
   /// A brief description of the symbol that can be appended in the completion
   /// candidate list. For example, "(X x, Y y) const" is a function signature.
   llvm::StringRef Signature;
