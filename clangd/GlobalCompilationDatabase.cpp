@@ -47,7 +47,7 @@ DirectoryBasedGlobalCompilationDatabase::getCompileCommand(PathRef File) const {
       return std::move(Candidates.front());
     }
   } else {
-    log("Failed to find compilation database for {0}", File);
+    log("Failed to find compilation database for " + Twine(File));
   }
   return llvm::None;
 }

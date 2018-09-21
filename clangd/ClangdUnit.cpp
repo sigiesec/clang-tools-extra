@@ -24,7 +24,6 @@
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/MacroInfo.h"
 #include "clang/Lex/Preprocessor.h"
-#include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTWriter.h"
 #include "clang/Tooling/CompilationDatabase.h"
@@ -89,7 +88,7 @@ public:
   CppFilePreambleCallbacks(PathRef File, PreambleParsedCallback ParsedCallback)
       : File(File), ParsedCallback(ParsedCallback) {}
 
-  IncludeStructure takeIncludes() { return std::move(Includes); }
+  std::vector<Inclusion> takeInclusions() { return std::move(Inclusions); }
 
   void AfterExecute(CompilerInstance &CI) override {
     if (!ParsedCallback)
@@ -104,13 +103,15 @@ public:
 
   std::unique_ptr<PPCallbacks> createPPCallbacks() override {
     assert(SourceMgr && "SourceMgr must be set at this point");
-    return collectIncludeStructureCallback(*SourceMgr, &Includes);
+    return collectInclusionsInMainFileCallback(
+        *SourceMgr,
+        [this](Inclusion Inc) { Inclusions.push_back(std::move(Inc)); });
   }
 
 private:
   PathRef File;
   PreambleParsedCallback ParsedCallback;
-  IncludeStructure Includes;
+  std::vector<Inclusion> Inclusions;
   SourceManager *SourceMgr = nullptr;
 };
 
@@ -147,19 +148,23 @@ ParsedAST::Build(std::unique_ptr<clang::CompilerInvocation> CI,
   auto Action = llvm::make_unique<ClangdFrontendAction>();
   const FrontendInputFile &MainInput = Clang->getFrontendOpts().Inputs[0];
   if (!Action->BeginSourceFile(*Clang, MainInput)) {
-    log("BeginSourceFile() failed when building AST for {0}",
+    log("BeginSourceFile() failed when building AST for " +
         MainInput.getFile());
     return llvm::None;
   }
 
+  std::vector<Inclusion> Inclusions;
   // Copy over the includes from the preamble, then combine with the
   // non-preamble includes below.
-  auto Includes = Preamble ? Preamble->Includes : IncludeStructure{};
-  Clang->getPreprocessor().addPPCallbacks(
-      collectIncludeStructureCallback(Clang->getSourceManager(), &Includes));
+  if (Preamble)
+    Inclusions = Preamble->Inclusions;
+
+  Clang->getPreprocessor().addPPCallbacks(collectInclusionsInMainFileCallback(
+      Clang->getSourceManager(),
+      [&Inclusions](Inclusion Inc) { Inclusions.push_back(std::move(Inc)); }));
 
   if (!Action->Execute())
-    log("Execute() failed when building AST for {0}", MainInput.getFile());
+    log("Execute() failed when building AST for " + MainInput.getFile());
 
   // UnitDiagsConsumer is local, we can not store it in CompilerInstance that
   // has a longer lifetime.
@@ -174,7 +179,7 @@ ParsedAST::Build(std::unique_ptr<clang::CompilerInvocation> CI,
     Diags.insert(Diags.begin(), Preamble->Diags.begin(), Preamble->Diags.end());
   return ParsedAST(std::move(Preamble), std::move(Clang), std::move(Action),
                    std::move(ParsedDecls), std::move(Diags),
-                   std::move(Includes));
+                   std::move(Inclusions));
 }
 
 ParsedAST::ParsedAST(ParsedAST &&Other) = default;
@@ -241,24 +246,25 @@ std::size_t ParsedAST::getUsedBytes() const {
   return Total;
 }
 
-const IncludeStructure &ParsedAST::getIncludeStructure() const {
-  return Includes;
+const std::vector<Inclusion> &ParsedAST::getInclusions() const {
+  return Inclusions;
 }
 
 PreambleData::PreambleData(PrecompiledPreamble Preamble,
-                           std::vector<Diag> Diags, IncludeStructure Includes)
+                           std::vector<Diag> Diags,
+                           std::vector<Inclusion> Inclusions)
     : Preamble(std::move(Preamble)), Diags(std::move(Diags)),
-      Includes(std::move(Includes)) {}
+      Inclusions(std::move(Inclusions)) {}
 
 ParsedAST::ParsedAST(std::shared_ptr<const PreambleData> Preamble,
                      std::unique_ptr<CompilerInstance> Clang,
                      std::unique_ptr<FrontendAction> Action,
                      std::vector<Decl *> LocalTopLevelDecls,
-                     std::vector<Diag> Diags, IncludeStructure Includes)
+                     std::vector<Diag> Diags, std::vector<Inclusion> Inclusions)
     : Preamble(std::move(Preamble)), Clang(std::move(Clang)),
       Action(std::move(Action)), Diags(std::move(Diags)),
       LocalTopLevelDecls(std::move(LocalTopLevelDecls)),
-      Includes(std::move(Includes)) {
+      Inclusions(std::move(Inclusions)) {
   assert(this->Clang);
   assert(this->Action);
 }
@@ -307,11 +313,11 @@ std::shared_ptr<const PreambleData> clangd::buildPreamble(
       compileCommandsAreEqual(Inputs.CompileCommand, OldCompileCommand) &&
       OldPreamble->Preamble.CanReuse(CI, ContentsBuffer.get(), Bounds,
                                      Inputs.FS.get())) {
-    vlog("Reusing preamble for file {0}", Twine(FileName));
+    log("Reusing preamble for file " + Twine(FileName));
     return OldPreamble;
   }
-  vlog("Preamble for file {0} cannot be reused. Attempting to rebuild it.",
-       FileName);
+  log("Preamble for file " + Twine(FileName) +
+      " cannot be reused. Attempting to rebuild it.");
 
   trace::Span Tracer("BuildPreamble");
   SPAN_ATTACH(Tracer, "File", FileName);
@@ -324,9 +330,6 @@ std::shared_ptr<const PreambleData> clangd::buildPreamble(
   // the preamble and make it smaller.
   assert(!CI.getFrontendOpts().SkipFunctionBodies);
   CI.getFrontendOpts().SkipFunctionBodies = true;
-  // We don't want to write comment locations into PCH. They are racy and slow
-  // to read back. We rely on dynamic index for the comments instead.
-  CI.getPreprocessorOpts().WriteCommentListToPCH = false;
 
   CppFilePreambleCallbacks SerializedDeclsCollector(FileName, PreambleCallback);
   if (Inputs.FS->setCurrentWorkingDirectory(Inputs.CompileCommand.Directory)) {
@@ -343,13 +346,13 @@ std::shared_ptr<const PreambleData> clangd::buildPreamble(
   CI.getFrontendOpts().SkipFunctionBodies = false;
 
   if (BuiltPreamble) {
-    vlog("Built preamble of size {0} for file {1}", BuiltPreamble->getSize(),
-         FileName);
+    log("Built preamble of size " + Twine(BuiltPreamble->getSize()) +
+        " for file " + Twine(FileName));
     return std::make_shared<PreambleData>(
         std::move(*BuiltPreamble), PreambleDiagnostics.take(),
-        SerializedDeclsCollector.takeIncludes());
+        SerializedDeclsCollector.takeInclusions());
   } else {
-    elog("Could not build a preamble for file {0}", FileName);
+    log("Could not build a preamble for file " + Twine(FileName));
     return nullptr;
   }
 }
@@ -379,7 +382,7 @@ SourceLocation clangd::getBeginningOfIdentifier(ParsedAST &Unit,
   const SourceManager &SourceMgr = AST.getSourceManager();
   auto Offset = positionToOffset(SourceMgr.getBufferData(FID), Pos);
   if (!Offset) {
-    log("getBeginningOfIdentifier: {0}", Offset.takeError());
+    log("getBeginningOfIdentifier: " + toString(Offset.takeError()));
     return SourceLocation();
   }
   SourceLocation InputLoc = SourceMgr.getComposedLoc(FID, *Offset);

@@ -25,23 +25,14 @@ LoggingSession::LoggingSession(clangd::Logger &Instance) {
 
 LoggingSession::~LoggingSession() { L = nullptr; }
 
-void detail::log(Logger::Level Level,
-                 const llvm::formatv_object_base &Message) {
+void log(const llvm::Twine &Message) {
   if (L)
-    L->log(Level, Message);
+    L->log(Message);
   else {
     static std::mutex Mu;
     std::lock_guard<std::mutex> Guard(Mu);
     llvm::errs() << Message << "\n";
   }
-}
-
-const char *detail::debugType(const char *Filename) {
-  if (const char *Slash = strrchr(Filename, '/'))
-    return Slash + 1;
-  if (const char *Backslash = strrchr(Filename, '\\'))
-    return Backslash + 1;
-  return Filename;
 }
 
 } // namespace clangd

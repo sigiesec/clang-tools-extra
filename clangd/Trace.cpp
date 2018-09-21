@@ -36,9 +36,9 @@ public:
     // calculations!
     Out << R"({"displayTimeUnit":"ns","traceEvents":[)"
         << "\n";
-    rawEvent("M", json::Object{
+    rawEvent("M", json::obj{
                       {"name", "process_name"},
-                      {"args", json::Object{{"name", "clangd"}}},
+                      {"args", json::obj{{"name", "clangd"}}},
                   });
   }
 
@@ -49,7 +49,7 @@ public:
 
   // We stash a Span object in the context. It will record the start/end,
   // and this also allows us to look up the parent Span's information.
-  Context beginSpan(llvm::StringRef Name, json::Object *Args) override {
+  Context beginSpan(llvm::StringRef Name, json::obj *Args) override {
     return Context::current().derive(
         SpanKey, llvm::make_unique<JSONSpan>(this, Name, Args));
   }
@@ -62,17 +62,18 @@ public:
     Context::current().getExisting(SpanKey)->markEnded();
   }
 
-  void instant(llvm::StringRef Name, json::Object &&Args) override {
+  void instant(llvm::StringRef Name, json::obj &&Args) override {
     captureThreadMetadata();
-    jsonEvent("i", json::Object{{"name", Name}, {"args", std::move(Args)}});
+    jsonEvent("i", json::obj{{"name", Name}, {"args", std::move(Args)}});
   }
 
   // Record an event on the current thread. ph, pid, tid, ts are set.
   // Contents must be a list of the other JSON key/values.
-  void jsonEvent(StringRef Phase, json::Object &&Contents,
-                 uint64_t TID = get_threadid(), double Timestamp = 0) {
+  void jsonEvent(StringRef Phase, json::obj &&Contents,
+                 uint64_t TID = get_threadid(),
+                 double Timestamp = 0) {
     Contents["ts"] = Timestamp ? Timestamp : timestamp();
-    Contents["tid"] = int64_t(TID);
+    Contents["tid"] = TID;
     std::lock_guard<std::mutex> Lock(Mu);
     rawEvent(Phase, std::move(Contents));
   }
@@ -80,7 +81,7 @@ public:
 private:
   class JSONSpan {
   public:
-    JSONSpan(JSONTracer *Tracer, llvm::StringRef Name, json::Object *Args)
+    JSONSpan(JSONTracer *Tracer, llvm::StringRef Name, json::obj *Args)
         : StartTime(Tracer->timestamp()), EndTime(0), Name(Name),
           TID(get_threadid()), Tracer(Tracer), Args(Args) {
       // ~JSONSpan() may run in a different thread, so we need to capture now.
@@ -101,15 +102,15 @@ private:
 
         auto FlowID = nextID();
         Tracer->jsonEvent("s",
-                          json::Object{{"id", FlowID},
-                                       {"name", "Context crosses threads"},
-                                       {"cat", "dummy"}},
+                          json::obj{{"id", FlowID},
+                                    {"name", "Context crosses threads"},
+                                    {"cat", "dummy"}},
                           (*Parent)->TID, (*Parent)->StartTime);
         Tracer->jsonEvent("f",
-                          json::Object{{"id", FlowID},
-                                       {"bp", "e"},
-                                       {"name", "Context crosses threads"},
-                                       {"cat", "dummy"}},
+                          json::obj{{"id", FlowID},
+                                    {"bp", "e"},
+                                    {"name", "Context crosses threads"},
+                                    {"cat", "dummy"}},
                           TID);
       }
     }
@@ -117,9 +118,9 @@ private:
     ~JSONSpan() {
       // Finally, record the event (ending at EndTime, not timestamp())!
       Tracer->jsonEvent("X",
-                        json::Object{{"name", std::move(Name)},
-                                     {"args", std::move(*Args)},
-                                     {"dur", EndTime - StartTime}},
+                        json::obj{{"name", std::move(Name)},
+                                  {"args", std::move(*Args)},
+                                  {"dur", EndTime - StartTime}},
                         TID, StartTime);
     }
 
@@ -129,8 +130,8 @@ private:
     }
 
   private:
-    static int64_t nextID() {
-      static std::atomic<int64_t> Next = {0};
+    static uint64_t nextID() {
+      static std::atomic<uint64_t> Next = {0};
       return Next++;
     }
 
@@ -139,17 +140,17 @@ private:
     std::string Name;
     uint64_t TID;
     JSONTracer *Tracer;
-    json::Object *Args;
+    json::obj *Args;
   };
   static Key<std::unique_ptr<JSONSpan>> SpanKey;
 
   // Record an event. ph and pid are set.
   // Contents must be a list of the other JSON key/values.
-  void rawEvent(StringRef Phase, json::Object &&Event) /*REQUIRES(Mu)*/ {
+  void rawEvent(StringRef Phase, json::obj &&Event) /*REQUIRES(Mu)*/ {
     // PID 0 represents the clangd process.
     Event["pid"] = 0;
     Event["ph"] = Phase;
-    Out << Sep << formatv(JSONFormat, json::Value(std::move(Event)));
+    Out << Sep << formatv(JSONFormat, json::Expr(std::move(Event)));
     Sep = ",\n";
   }
 
@@ -161,10 +162,10 @@ private:
       SmallString<32> Name;
       get_thread_name(Name);
       if (!Name.empty()) {
-        rawEvent("M", json::Object{
-                          {"tid", int64_t(TID)},
+        rawEvent("M", json::obj{
+                          {"tid", TID},
                           {"name", "thread_name"},
-                          {"args", json::Object{{"name", Name}}},
+                          {"args", json::obj{{"name", Name}}},
                       });
       }
     }
@@ -203,14 +204,14 @@ std::unique_ptr<EventTracer> createJSONTracer(llvm::raw_ostream &OS,
 void log(const Twine &Message) {
   if (!T)
     return;
-  T->instant("Log", json::Object{{"Message", Message.str()}});
+  T->instant("Log", json::obj{{"Message", Message.str()}});
 }
 
 // Returned context owns Args.
-static Context makeSpanContext(llvm::Twine Name, json::Object *Args) {
+static Context makeSpanContext(llvm::Twine Name, json::obj *Args) {
   if (!T)
     return Context::current().clone();
-  WithContextValue WithArgs{std::unique_ptr<json::Object>(Args)};
+  WithContextValue WithArgs{std::unique_ptr<json::obj>(Args)};
   return T->beginSpan(Name.isSingleStringRef() ? Name.getSingleStringRef()
                                                : llvm::StringRef(Name.str()),
                       Args);
@@ -220,7 +221,7 @@ static Context makeSpanContext(llvm::Twine Name, json::Object *Args) {
 // The args are owned by the context though. They stick around until the
 // beginSpan() context is destroyed, when the tracing engine will consume them.
 Span::Span(llvm::Twine Name)
-    : Args(T ? new json::Object() : nullptr),
+    : Args(T ? new json::obj() : nullptr),
       RestoreCtx(makeSpanContext(Name, Args)) {}
 
 Span::~Span() {

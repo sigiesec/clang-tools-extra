@@ -21,7 +21,6 @@
 #include "FloatLoopCounter.h"
 #include "LimitedRandomnessCheck.h"
 #include "PostfixOperatorCheck.h"
-#include "ProperlySeededRandomGeneratorCheck.h"
 #include "SetLongJmpCheck.h"
 #include "StaticObjectExceptionCheck.h"
 #include "StrToNumCheck.h"
@@ -59,8 +58,6 @@ public:
         "cert-err61-cpp");
     // MSC
     CheckFactories.registerCheck<LimitedRandomnessCheck>("cert-msc50-cpp");
-    CheckFactories.registerCheck<ProperlySeededRandomGeneratorCheck>(
-        "cert-msc51-cpp");
 
     // C checkers
     // DCL
@@ -75,8 +72,6 @@ public:
     CheckFactories.registerCheck<StrToNumCheck>("cert-err34-c");
     // MSC
     CheckFactories.registerCheck<LimitedRandomnessCheck>("cert-msc30-c");
-    CheckFactories.registerCheck<ProperlySeededRandomGeneratorCheck>(
-        "cert-msc32-c");
   }
 };
 

@@ -36,7 +36,7 @@ template <typename T> struct CaptureProxy {
   }
   CaptureProxy &operator=(CaptureProxy &&) = delete;
 
-  operator llvm::unique_function<void(T)>() && {
+  operator UniqueFunction<void(T)>() && {
     assert(!Future.valid() && "conversion to callback called multiple times");
     Future = Promise.get_future();
     return Bind(
@@ -68,10 +68,10 @@ template <typename T> CaptureProxy<T> capture(llvm::Optional<T> &Target) {
 }
 } // namespace
 
-llvm::Expected<CodeCompleteResult>
+llvm::Expected<CompletionList>
 runCodeComplete(ClangdServer &Server, PathRef File, Position Pos,
                 clangd::CodeCompleteOptions Opts) {
-  llvm::Optional<llvm::Expected<CodeCompleteResult>> Result;
+  llvm::Optional<llvm::Expected<CompletionList>> Result;
   Server.codeComplete(File, Pos, Opts, capture(Result));
   return std::move(*Result);
 }
@@ -114,13 +114,6 @@ llvm::Expected<std::vector<SymbolInformation>>
 runWorkspaceSymbols(ClangdServer &Server, StringRef Query, int Limit) {
   llvm::Optional<llvm::Expected<std::vector<SymbolInformation>>> Result;
   Server.workspaceSymbols(Query, Limit, capture(Result));
-  return std::move(*Result);
-}
-
-llvm::Expected<std::vector<SymbolInformation>>
-runDocumentSymbols(ClangdServer &Server, PathRef File) {
-  llvm::Optional<llvm::Expected<std::vector<SymbolInformation>>> Result;
-  Server.documentSymbols(File, capture(Result));
   return std::move(*Result);
 }
 

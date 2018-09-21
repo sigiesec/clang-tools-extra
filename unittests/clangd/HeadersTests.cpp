@@ -64,17 +64,18 @@ private:
   }
 
 protected:
-  IncludeStructure collectIncludes() {
+  std::vector<Inclusion> collectIncludes() {
     auto Clang = setupClang();
     PreprocessOnlyAction Action;
     EXPECT_TRUE(
         Action.BeginSourceFile(*Clang, Clang->getFrontendOpts().Inputs[0]));
-    IncludeStructure Includes;
-    Clang->getPreprocessor().addPPCallbacks(
-        collectIncludeStructureCallback(Clang->getSourceManager(), &Includes));
+    std::vector<Inclusion> Inclusions;
+    Clang->getPreprocessor().addPPCallbacks(collectInclusionsInMainFileCallback(
+        Clang->getSourceManager(),
+        [&](Inclusion Inc) { Inclusions.push_back(std::move(Inc)); }));
     EXPECT_TRUE(Action.Execute());
     Action.EndSourceFile();
-    return Includes;
+    return Inclusions;
   }
 
   // Calculates the include path, or returns "" on error or header should not be
@@ -132,14 +133,6 @@ protected:
 MATCHER_P(Written, Name, "") { return arg.Written == Name; }
 MATCHER_P(Resolved, Name, "") { return arg.Resolved == Name; }
 
-MATCHER_P2(Distance, File, D, "") {
-  if (arg.getKey() != File)
-    *result_listener << "file =" << arg.getKey().str();
-  if (arg.getValue() != D)
-    *result_listener << "distance =" << arg.getValue();
-  return arg.getKey() == File && arg.getValue() == D;
-}
-
 TEST_F(HeadersTest, CollectRewrittenAndResolved) {
   FS.Files[MainFile] = R"cpp(
 #include "sub/bar.h" // not shortest
@@ -147,12 +140,9 @@ TEST_F(HeadersTest, CollectRewrittenAndResolved) {
   std::string BarHeader = testPath("sub/bar.h");
   FS.Files[BarHeader] = "";
 
-  EXPECT_THAT(collectIncludes().MainFileIncludes,
+  EXPECT_THAT(collectIncludes(),
               UnorderedElementsAre(
                   AllOf(Written("\"sub/bar.h\""), Resolved(BarHeader))));
-  EXPECT_THAT(collectIncludes().includeDepth(MainFile),
-              UnorderedElementsAre(Distance(MainFile, 0u),
-                                   Distance(testPath("sub/bar.h"), 1u)));
 }
 
 TEST_F(HeadersTest, OnlyCollectInclusionsInMain) {
@@ -166,16 +156,8 @@ TEST_F(HeadersTest, OnlyCollectInclusionsInMain) {
 #include "bar.h"
 )cpp";
   EXPECT_THAT(
-      collectIncludes().MainFileIncludes,
+      collectIncludes(),
       UnorderedElementsAre(AllOf(Written("\"bar.h\""), Resolved(BarHeader))));
-  EXPECT_THAT(collectIncludes().includeDepth(MainFile),
-              UnorderedElementsAre(Distance(MainFile, 0u),
-                                   Distance(testPath("sub/bar.h"), 1u),
-                                   Distance(testPath("sub/baz.h"), 2u)));
-  // includeDepth() also works for non-main files.
-  EXPECT_THAT(collectIncludes().includeDepth(testPath("sub/bar.h")),
-              UnorderedElementsAre(Distance(testPath("sub/bar.h"), 0u),
-                                   Distance(testPath("sub/baz.h"), 1u)));
 }
 
 TEST_F(HeadersTest, UnResolvedInclusion) {
@@ -183,10 +165,8 @@ TEST_F(HeadersTest, UnResolvedInclusion) {
 #include "foo.h"
 )cpp";
 
-  EXPECT_THAT(collectIncludes().MainFileIncludes,
+  EXPECT_THAT(collectIncludes(),
               UnorderedElementsAre(AllOf(Written("\"foo.h\""), Resolved(""))));
-  EXPECT_THAT(collectIncludes().includeDepth(MainFile),
-              UnorderedElementsAre(Distance(MainFile, 0u)));
 }
 
 TEST_F(HeadersTest, InsertInclude) {

@@ -22,7 +22,7 @@ namespace clangd {
 void runAddDocument(ClangdServer &Server, PathRef File, StringRef Contents,
                     WantDiagnostics WantDiags = WantDiagnostics::Auto);
 
-llvm::Expected<CodeCompleteResult>
+llvm::Expected<CompletionList>
 runCodeComplete(ClangdServer &Server, PathRef File, Position Pos,
                 clangd::CodeCompleteOptions Opts);
 
@@ -42,9 +42,6 @@ std::string runDumpAST(ClangdServer &Server, PathRef File);
 
 llvm::Expected<std::vector<SymbolInformation>>
 runWorkspaceSymbols(ClangdServer &Server, StringRef Query, int Limit);
-
-llvm::Expected<std::vector<SymbolInformation>>
-runDocumentSymbols(ClangdServer &Server, PathRef File);
 
 } // namespace clangd
 } // namespace clang

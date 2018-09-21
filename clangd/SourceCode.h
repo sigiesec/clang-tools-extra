@@ -61,9 +61,6 @@ TextEdit replacementToEdit(StringRef Code, const tooling::Replacement &R);
 std::vector<TextEdit> replacementsToEdits(StringRef Code,
                                           const tooling::Replacements &Repls);
 
-/// Get the absolute file path of a given file entry.
-llvm::Optional<std::string> getAbsoluteFilePath(const FileEntry *F,
-                                                const SourceManager &SourceMgr);
 } // namespace clangd
 } // namespace clang
 #endif

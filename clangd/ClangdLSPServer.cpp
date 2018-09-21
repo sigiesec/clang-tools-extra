@@ -18,7 +18,6 @@
 
 using namespace clang::clangd;
 using namespace clang;
-using namespace llvm;
 
 namespace {
 
@@ -88,35 +87,34 @@ void ClangdLSPServer::onInitialize(InitializeParams &Params) {
     }
   }
 
-  reply(json::Object{
+  reply(json::obj{
       {{"capabilities",
-        json::Object{
+        json::obj{
             {"textDocumentSync", (int)TextDocumentSyncKind::Incremental},
             {"documentFormattingProvider", true},
             {"documentRangeFormattingProvider", true},
             {"documentOnTypeFormattingProvider",
-             json::Object{
+             json::obj{
                  {"firstTriggerCharacter", "}"},
                  {"moreTriggerCharacter", {}},
              }},
             {"codeActionProvider", true},
             {"completionProvider",
-             json::Object{
+             json::obj{
                  {"resolveProvider", false},
                  {"triggerCharacters", {".", ">", ":"}},
              }},
             {"signatureHelpProvider",
-             json::Object{
+             json::obj{
                  {"triggerCharacters", {"(", ","}},
              }},
             {"definitionProvider", true},
             {"documentHighlightProvider", true},
             {"hoverProvider", true},
             {"renameProvider", true},
-            {"documentSymbolProvider", true},
             {"workspaceSymbolProvider", true},
             {"executeCommandProvider",
-             json::Object{
+             json::obj{
                  {"commands", {ExecuteCommandParams::CLANGD_APPLY_FIX_COMMAND}},
              }},
         }}}});
@@ -160,7 +158,7 @@ void ClangdLSPServer::onDocumentDidChange(DidChangeTextDocumentParams &Params) {
     DraftMgr.removeDraft(File);
     Server.removeDocument(File);
     CDB.invalidate(File);
-    elog("Failed to update {0}: {1}", File, Contents.takeError());
+    log(llvm::toString(Contents.takeError()));
     return;
   }
 
@@ -213,7 +211,7 @@ void ClangdLSPServer::onWorkspaceSymbol(WorkspaceSymbolParams &Params) {
         for (auto &Sym : *Items)
           Sym.kind = adjustKindToCapability(Sym.kind, SupportedSymbolKinds);
 
-        reply(json::Array(*Items));
+        reply(json::ary(*Items));
       });
 }
 
@@ -259,7 +257,7 @@ void ClangdLSPServer::onDocumentOnTypeFormatting(
 
   auto ReplacementsOrError = Server.formatOnType(*Code, File, Params.position);
   if (ReplacementsOrError)
-    reply(json::Array(replacementsToEdits(*Code, ReplacementsOrError.get())));
+    reply(json::ary(replacementsToEdits(*Code, ReplacementsOrError.get())));
   else
     replyError(ErrorCode::UnknownErrorCode,
                llvm::toString(ReplacementsOrError.takeError()));
@@ -275,7 +273,7 @@ void ClangdLSPServer::onDocumentRangeFormatting(
 
   auto ReplacementsOrError = Server.formatRange(*Code, File, Params.range);
   if (ReplacementsOrError)
-    reply(json::Array(replacementsToEdits(*Code, ReplacementsOrError.get())));
+    reply(json::ary(replacementsToEdits(*Code, ReplacementsOrError.get())));
   else
     replyError(ErrorCode::UnknownErrorCode,
                llvm::toString(ReplacementsOrError.takeError()));
@@ -290,23 +288,10 @@ void ClangdLSPServer::onDocumentFormatting(DocumentFormattingParams &Params) {
 
   auto ReplacementsOrError = Server.formatFile(*Code, File);
   if (ReplacementsOrError)
-    reply(json::Array(replacementsToEdits(*Code, ReplacementsOrError.get())));
+    reply(json::ary(replacementsToEdits(*Code, ReplacementsOrError.get())));
   else
     replyError(ErrorCode::UnknownErrorCode,
                llvm::toString(ReplacementsOrError.takeError()));
-}
-
-void ClangdLSPServer::onDocumentSymbol(DocumentSymbolParams &Params) {
-  Server.documentSymbols(
-      Params.textDocument.uri.file(),
-      [this](llvm::Expected<std::vector<SymbolInformation>> Items) {
-        if (!Items)
-          return replyError(ErrorCode::InvalidParams,
-                            llvm::toString(Items.takeError()));
-        for (auto &Sym : *Items)
-          Sym.kind = adjustKindToCapability(Sym.kind, SupportedSymbolKinds);
-        reply(json::Array(*Items));
-      });
 }
 
 void ClangdLSPServer::onCodeAction(CodeActionParams &Params) {
@@ -317,13 +302,13 @@ void ClangdLSPServer::onCodeAction(CodeActionParams &Params) {
     return replyError(ErrorCode::InvalidParams,
                       "onCodeAction called for non-added file");
 
-  json::Array Commands;
+  json::ary Commands;
   for (Diagnostic &D : Params.context.diagnostics) {
     for (auto &F : getFixes(Params.textDocument.uri.file(), D)) {
       WorkspaceEdit WE;
       std::vector<TextEdit> Edits(F.Edits.begin(), F.Edits.end());
       WE.changes = {{Params.textDocument.uri.uri(), std::move(Edits)}};
-      Commands.push_back(json::Object{
+      Commands.push_back(json::obj{
           {"title", llvm::formatv("Apply fix: {0}", F.Message)},
           {"command", ExecuteCommandParams::CLANGD_APPLY_FIX_COMMAND},
           {"arguments", {WE}},
@@ -335,15 +320,11 @@ void ClangdLSPServer::onCodeAction(CodeActionParams &Params) {
 
 void ClangdLSPServer::onCompletion(TextDocumentPositionParams &Params) {
   Server.codeComplete(Params.textDocument.uri.file(), Params.position, CCOpts,
-                      [this](llvm::Expected<CodeCompleteResult> List) {
+                      [](llvm::Expected<CompletionList> List) {
                         if (!List)
                           return replyError(ErrorCode::InvalidParams,
                                             llvm::toString(List.takeError()));
-                        CompletionList LSPList;
-                        LSPList.isIncomplete = List->HasMore;
-                        for (const auto &R : List->Completions)
-                          LSPList.items.push_back(R.render(CCOpts));
-                        reply(std::move(LSPList));
+                        reply(*List);
                       });
 }
 
@@ -365,7 +346,7 @@ void ClangdLSPServer::onGoToDefinition(TextDocumentPositionParams &Params) {
         if (!Items)
           return replyError(ErrorCode::InvalidParams,
                             llvm::toString(Items.takeError()));
-        reply(json::Array(*Items));
+        reply(json::ary(*Items));
       });
 }
 
@@ -381,7 +362,7 @@ void ClangdLSPServer::onDocumentHighlight(TextDocumentPositionParams &Params) {
         if (!Highlights)
           return replyError(ErrorCode::InternalError,
                             llvm::toString(Highlights.takeError()));
-        reply(json::Array(*Highlights));
+        reply(json::ary(*Highlights));
       });
 }
 
@@ -425,7 +406,7 @@ bool ClangdLSPServer::run(std::FILE *In, JSONStreamStyle InputStyle) {
   assert(!IsDone && "Run was called before");
 
   // Set up JSONRPCDispatcher.
-  JSONRPCDispatcher Dispatcher([](const json::Value &Params) {
+  JSONRPCDispatcher Dispatcher([](const json::Expr &Params) {
     replyError(ErrorCode::MethodNotFound, "method not found");
   });
   registerCallbackHandlers(Dispatcher, /*Callbacks=*/*this);
@@ -457,12 +438,12 @@ std::vector<Fix> ClangdLSPServer::getFixes(StringRef File,
 
 void ClangdLSPServer::onDiagnosticsReady(PathRef File,
                                          std::vector<Diag> Diagnostics) {
-  json::Array DiagnosticsJSON;
+  json::ary DiagnosticsJSON;
 
   DiagnosticToReplacementMap LocalFixIts; // Temporary storage
   for (auto &Diag : Diagnostics) {
     toLSPDiags(Diag, [&](clangd::Diagnostic Diag, llvm::ArrayRef<Fix> Fixes) {
-      DiagnosticsJSON.push_back(json::Object{
+      DiagnosticsJSON.push_back(json::obj{
           {"range", Diag.range},
           {"severity", Diag.severity},
           {"message", Diag.message},
@@ -482,11 +463,11 @@ void ClangdLSPServer::onDiagnosticsReady(PathRef File,
   }
 
   // Publish diagnostics.
-  Out.writeMessage(json::Object{
+  Out.writeMessage(json::obj{
       {"jsonrpc", "2.0"},
       {"method", "textDocument/publishDiagnostics"},
       {"params",
-       json::Object{
+       json::obj{
            {"uri", URIForFile{File}},
            {"diagnostics", std::move(DiagnosticsJSON)},
        }},

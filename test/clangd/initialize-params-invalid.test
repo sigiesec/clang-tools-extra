@@ -22,7 +22,6 @@
 # CHECK-NEXT:        "moreTriggerCharacter": []
 # CHECK-NEXT:      },
 # CHECK-NEXT:      "documentRangeFormattingProvider": true,
-# CHECK-NEXT:      "documentSymbolProvider": true,
 # CHECK-NEXT:      "executeCommandProvider": {
 # CHECK-NEXT:        "commands": [
 # CHECK-NEXT:          "clangd.applyFix"

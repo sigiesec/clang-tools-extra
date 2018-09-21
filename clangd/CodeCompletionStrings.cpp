@@ -32,6 +32,34 @@ void appendEscapeSnippet(const llvm::StringRef Text, std::string *Out) {
   }
 }
 
+bool canRequestComment(const ASTContext &Ctx, const NamedDecl &D,
+                       bool CommentsFromHeaders) {
+  if (CommentsFromHeaders)
+    return true;
+  auto &SourceMgr = Ctx.getSourceManager();
+  // Accessing comments for decls from  invalid preamble can lead to crashes.
+  // So we only return comments from the main file when doing code completion.
+  // For indexing, we still read all the comments.
+  // FIXME: find a better fix, e.g. store file contents in the preamble or get
+  // doc comments from the index.
+  auto canRequestForDecl = [&](const NamedDecl &D) -> bool {
+    for (auto *Redecl : D.redecls()) {
+      auto Loc = SourceMgr.getSpellingLoc(Redecl->getLocation());
+      if (!SourceMgr.isWrittenInMainFile(Loc))
+        return false;
+    }
+    return true;
+  };
+  // First, check the decl itself.
+  if (!canRequestForDecl(D))
+    return false;
+  // Completion also returns comments for properties, corresponding to ObjC
+  // methods.
+  const ObjCMethodDecl *M = dyn_cast<ObjCMethodDecl>(&D);
+  const ObjCPropertyDecl *PDecl = M ? M->findPropertyDecl() : nullptr;
+  return !PDecl || canRequestForDecl(*PDecl);
+}
+
 bool LooksLikeDocComment(llvm::StringRef CommentText) {
   // We don't report comments that only contain "special" chars.
   // This avoids reporting various delimiters, like:
@@ -52,20 +80,11 @@ std::string getDocComment(const ASTContext &Ctx,
   if (Result.Kind != CodeCompletionResult::RK_Declaration)
     return "";
   auto *Decl = Result.getDeclaration();
-  if (!Decl || llvm::isa<NamespaceDecl>(Decl)) {
-    // Namespaces often have too many redecls for any particular redecl comment
-    // to be useful. Moreover, we often confuse file headers or generated
-    // comments with namespace comments. Therefore we choose to just ignore
-    // the comments for namespaces.
+  if (!Decl || !canRequestComment(Ctx, *Decl, CommentsFromHeaders))
     return "";
-  }
   const RawComment *RC = getCompletionComment(Ctx, Decl);
   if (!RC)
     return "";
-
-  // Sanity check that the comment does not come from the PCH. We choose to not
-  // write them into PCH, because they are racy and slow to load.
-  assert(!Ctx.getSourceManager().isLoadedSourceLocation(RC->getLocStart()));
   std::string Doc = RC->getFormattedText(Ctx.getSourceManager(), Ctx.getDiagnostics());
   if (!LooksLikeDocComment(Doc))
     return "";
@@ -77,14 +96,11 @@ getParameterDocComment(const ASTContext &Ctx,
                        const CodeCompleteConsumer::OverloadCandidate &Result,
                        unsigned ArgIndex, bool CommentsFromHeaders) {
   auto *Func = Result.getFunction();
-  if (!Func)
+  if (!Func || !canRequestComment(Ctx, *Func, CommentsFromHeaders))
     return "";
   const RawComment *RC = getParameterComment(Ctx, Result, ArgIndex);
   if (!RC)
     return "";
-  // Sanity check that the comment does not come from the PCH. We choose to not
-  // write them into PCH, because they are racy and slow to load.
-  assert(!Ctx.getSourceManager().isLoadedSourceLocation(RC->getLocStart()));
   std::string Doc = RC->getFormattedText(Ctx.getSourceManager(), Ctx.getDiagnostics());
   if (!LooksLikeDocComment(Doc))
     return "";

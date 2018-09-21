@@ -17,13 +17,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "FileDistance.h"
 #include "Quality.h"
 #include "TestFS.h"
 #include "TestTU.h"
-#include "clang/AST/Decl.h"
-#include "clang/AST/DeclCXX.h"
-#include "llvm/Support/Casting.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -77,31 +73,17 @@ TEST(QualityTests, SymbolQualitySignalExtraction) {
 TEST(QualityTests, SymbolRelevanceSignalExtraction) {
   TestTU Test;
   Test.HeaderCode = R"cpp(
-  int header();
-  int header_main();
-
-  namespace hdr { class Bar {}; } // namespace hdr
-
-  #define DEFINE_FLAG(X) \
-  namespace flags { \
-  int FLAGS_##X; \
-  } \
-
-  DEFINE_FLAG(FOO)
-  )cpp";
+    int header();
+    int header_main();
+    )cpp";
   Test.Code = R"cpp(
-  using hdr::Bar;
+    int ::header_main() {}
+    int main();
 
-  using flags::FLAGS_FOO;
+    [[deprecated]]
+    int deprecated() { return 0; }
 
-  int ::header_main() {}
-  int main();
-
-  [[deprecated]]
-  int deprecated() { return 0; }
-
-  namespace { struct X { void y() { int z; } }; }
-  struct S{}
+    namespace { struct X { void y() { int z; } }; }
   )cpp";
   auto AST = Test.build();
 
@@ -124,32 +106,6 @@ TEST(QualityTests, SymbolRelevanceSignalExtraction) {
   EXPECT_FLOAT_EQ(Relevance.SemaProximityScore, 1.0f)
       << "Current file and header";
 
-  auto constructShadowDeclCompletionResult = [&](const std::string DeclName) {
-    auto *Shadow =
-        *dyn_cast<UsingDecl>(
-             &findAnyDecl(AST,
-                          [&](const NamedDecl &ND) {
-                            if (const UsingDecl *Using =
-                                    dyn_cast<UsingDecl>(&ND))
-                              if (Using->shadow_size() &&
-                                  Using->getQualifiedNameAsString() == DeclName)
-                                return true;
-                            return false;
-                          }))
-             ->shadow_begin();
-    CodeCompletionResult Result(Shadow->getTargetDecl(), 42);
-    Result.ShadowDecl = Shadow;
-    return Result;
-  };
-
-  Relevance = {};
-  Relevance.merge(constructShadowDeclCompletionResult("Bar"));
-  EXPECT_FLOAT_EQ(Relevance.SemaProximityScore, 1.0f)
-      << "Using declaration in main file";
-  Relevance.merge(constructShadowDeclCompletionResult("FLAGS_FOO"));
-  EXPECT_FLOAT_EQ(Relevance.SemaProximityScore, 1.0f)
-      << "Using declaration in main file";
-
   Relevance = {};
   Relevance.merge(CodeCompletionResult(&findAnyDecl(AST, "X"), 42));
   EXPECT_EQ(Relevance.Scope, SymbolRelevanceSignals::FileScope);
@@ -159,10 +115,6 @@ TEST(QualityTests, SymbolRelevanceSignalExtraction) {
   Relevance = {};
   Relevance.merge(CodeCompletionResult(&findAnyDecl(AST, "z"), 42));
   EXPECT_EQ(Relevance.Scope, SymbolRelevanceSignals::FunctionScope);
-  // The injected class name is treated as the outer class name.
-  Relevance = {};
-  Relevance.merge(CodeCompletionResult(&findDecl(AST, "S::S"), 42));
-  EXPECT_EQ(Relevance.Scope, SymbolRelevanceSignals::GlobalScope);
 }
 
 // Do the signals move the scores in the direction we expect?
@@ -179,7 +131,7 @@ TEST(QualityTests, SymbolQualitySignalsSanity) {
   EXPECT_LT(ReservedName.evaluate(), Default.evaluate());
 
   SymbolQualitySignals WithReferences, ManyReferences;
-  WithReferences.References = 20;
+  WithReferences.References = 10;
   ManyReferences.References = 1000;
   EXPECT_GT(WithReferences.evaluate(), Default.evaluate());
   EXPECT_GT(ManyReferences.evaluate(), WithReferences.evaluate());
@@ -205,22 +157,9 @@ TEST(QualityTests, SymbolRelevanceSignalsSanity) {
   PoorNameMatch.NameMatch = 0.2f;
   EXPECT_LT(PoorNameMatch.evaluate(), Default.evaluate());
 
-  SymbolRelevanceSignals WithSemaProximity;
-  WithSemaProximity.SemaProximityScore = 0.2f;
-  EXPECT_GT(WithSemaProximity.evaluate(), Default.evaluate());
-
-  SymbolRelevanceSignals IndexProximate;
-  IndexProximate.SymbolURI = "unittest:/foo/bar.h";
-  llvm::StringMap<SourceParams> ProxSources;
-  ProxSources.try_emplace(testPath("foo/baz.h"));
-  URIDistance Distance(ProxSources);
-  IndexProximate.FileProximityMatch = &Distance;
-  EXPECT_GT(IndexProximate.evaluate(), Default.evaluate());
-  SymbolRelevanceSignals IndexDistant = IndexProximate;
-  IndexDistant.SymbolURI = "unittest:/elsewhere/path.h";
-  EXPECT_GT(IndexProximate.evaluate(), IndexDistant.evaluate())
-      << IndexProximate << IndexDistant;
-  EXPECT_GT(IndexDistant.evaluate(), Default.evaluate());
+  SymbolRelevanceSignals WithProximity;
+  WithProximity.SemaProximityScore = 0.2f;
+  EXPECT_GT(WithProximity.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals Scoped;
   Scoped.Scope = SymbolRelevanceSignals::FileScope;
@@ -230,8 +169,7 @@ TEST(QualityTests, SymbolRelevanceSignalsSanity) {
 }
 
 TEST(QualityTests, SortText) {
-  EXPECT_LT(sortText(std::numeric_limits<float>::infinity()),
-            sortText(1000.2f));
+  EXPECT_LT(sortText(std::numeric_limits<float>::infinity()), sortText(1000.2f));
   EXPECT_LT(sortText(1000.2f), sortText(1));
   EXPECT_LT(sortText(1), sortText(0.3f));
   EXPECT_LT(sortText(0.3f), sortText(0));
@@ -242,29 +180,57 @@ TEST(QualityTests, SortText) {
   EXPECT_LT(sortText(0, "a"), sortText(0, "z"));
 }
 
-TEST(QualityTests, NoBoostForClassConstructor) {
-  auto Header = TestTU::withHeaderCode(R"cpp(
-    class Foo {
-    public:
-      Foo(int);
-    };
-  )cpp");
-  auto Symbols = Header.headerSymbols();
-  auto AST = Header.build();
+// {a,b,c} becomes /clangd-test/a/b/c
+std::string joinPaths(llvm::ArrayRef<StringRef> Parts) {
+  return testPath(
+      llvm::join(Parts.begin(), Parts.end(), llvm::sys::path::get_separator()));
+}
 
-  const NamedDecl *Foo = &findDecl(AST, "Foo");
-  SymbolRelevanceSignals Cls;
-  Cls.merge(CodeCompletionResult(Foo, /*Priority=*/0));
+static constexpr float ProximityBase = 0.7f;
 
-  const NamedDecl *CtorDecl = &findAnyDecl(AST, [](const NamedDecl &ND) {
-    return (ND.getQualifiedNameAsString() == "Foo::Foo") &&
-           llvm::isa<CXXConstructorDecl>(&ND);
-  });
-  SymbolRelevanceSignals Ctor;
-  Ctor.merge(CodeCompletionResult(CtorDecl, /*Priority=*/0));
+// Calculates a proximity score for an index symbol with declaration file
+// SymPath with the given URI scheme.
+float URIProximity(const FileProximityMatcher &Matcher, StringRef SymPath,
+                     StringRef Scheme = "file") {
+  auto U = URI::create(SymPath, Scheme);
+  EXPECT_TRUE(static_cast<bool>(U)) << llvm::toString(U.takeError());
+  return Matcher.uriProximity(U->toString());
+}
 
-  EXPECT_EQ(Cls.Scope, SymbolRelevanceSignals::GlobalScope);
-  EXPECT_EQ(Ctor.Scope, SymbolRelevanceSignals::GlobalScope);
+TEST(QualityTests, URIProximityScores) {
+  FileProximityMatcher Matcher(
+      /*ProximityPaths=*/{joinPaths({"a", "b", "c", "d", "x"})});
+
+  EXPECT_FLOAT_EQ(URIProximity(Matcher, joinPaths({"a", "b", "c", "d", "x"})),
+                  1);
+  EXPECT_FLOAT_EQ(URIProximity(Matcher, joinPaths({"a", "b", "c", "d", "y"})),
+                  ProximityBase);
+  EXPECT_FLOAT_EQ(URIProximity(Matcher, joinPaths({"a", "y", "z"})),
+                  std::pow(ProximityBase, 5));
+  EXPECT_FLOAT_EQ(
+      URIProximity(Matcher, joinPaths({"a", "b", "c", "d", "e", "y"})),
+      std::pow(ProximityBase, 2));
+  EXPECT_FLOAT_EQ(
+      URIProximity(Matcher, joinPaths({"a", "b", "m", "n", "o", "y"})),
+      std::pow(ProximityBase, 5));
+  EXPECT_FLOAT_EQ(
+      URIProximity(Matcher, joinPaths({"a", "t", "m", "n", "o", "y"})),
+      std::pow(ProximityBase, 6));
+  // Note the common directory is /clang-test/
+  EXPECT_FLOAT_EQ(URIProximity(Matcher, joinPaths({"m", "n", "o", "p", "y"})),
+                  std::pow(ProximityBase, 7));
+}
+
+TEST(QualityTests, URIProximityScoresWithTestURI) {
+  FileProximityMatcher Matcher(
+      /*ProximityPaths=*/{joinPaths({"b", "c", "x"})});
+  EXPECT_FLOAT_EQ(URIProximity(Matcher, joinPaths({"b", "c", "x"}), "unittest"),
+                  1);
+  EXPECT_FLOAT_EQ(URIProximity(Matcher, joinPaths({"b", "y"}), "unittest"),
+                  std::pow(ProximityBase, 2));
+  // unittest:///b/c/x vs unittest:///m/n/y. No common directory.
+  EXPECT_FLOAT_EQ(URIProximity(Matcher, joinPaths({"m", "n", "y"}), "unittest"),
+                  std::pow(ProximityBase, 4));
 }
 
 } // namespace

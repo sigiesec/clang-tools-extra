@@ -51,7 +51,7 @@ bool AsyncTaskRunner::wait(Deadline D) const {
 }
 
 void AsyncTaskRunner::runAsync(llvm::Twine Name,
-                               llvm::unique_function<void()> Action) {
+                               UniqueFunction<void()> Action) {
   {
     std::lock_guard<std::mutex> Lock(Mutex);
     ++InFlightTasks;
