@@ -1,18 +1,13 @@
-===================================================
-Extra Clang Tools 7.0.0 (In-Progress) Release Notes
-===================================================
+=====================================
+Extra Clang Tools 7.0.0 Release Notes
+=====================================
 
 .. contents::
    :local:
    :depth: 3
 
-Written by the `LLVM Team <http://llvm.org/>`_
+Written by the `LLVM Team <https://llvm.org/>`_
 
-.. warning::
-
-   These are in-progress notes for the upcoming Extra Clang Tools 7 release.
-   Release notes for previous releases can be found on
-   `the Download Page <http://releases.llvm.org/download.html>`_.
 
 Introduction
 ============
@@ -21,16 +16,11 @@ This document contains the release notes for the Extra Clang Tools, part of the
 Clang release 7.0.0. Here we describe the status of the Extra Clang Tools in
 some detail, including major improvements from the previous release and new
 feature work. All LLVM releases may be downloaded from the `LLVM releases web
-site <http://llvm.org/releases/>`_.
+site <https://llvm.org/releases/>`_.
 
 For more information about Clang or LLVM, including information about
-the latest release, please see the `Clang Web Site <http://clang.llvm.org>`_ or
-the `LLVM Web Site <http://llvm.org>`_.
-
-Note that if you are reading this file from a Subversion checkout or the
-main Clang web page, this document applies to the *next* release, not
-the current one. To see the release notes for a specific release, please
-see the `releases page <http://llvm.org/releases/>`_.
+the latest release, please see the `Clang Web Site <https://clang.llvm.org>`_ or
+the `LLVM Web Site <https://llvm.org>`_.
 
 What's New in Extra Clang Tools 7.0.0?
 ======================================
@@ -41,6 +31,9 @@ infrastructure are described first, followed by tool-specific sections.
 
 Major New Features
 ------------------
+
+BTC-specific
+------------
 
 ...
 
@@ -74,6 +67,9 @@ Major New Features
 
   Find global variables.
 
+- The 'btc-derived-from-sharable-stack-prohibition' check was renamed to :doc:`btc-unmanaged-derived-from-sharable
+  <clang-tidy/checks/btc-unmanaged-derived-from-sharable>`
+
 Improvements to clang-query
 ---------------------------
 
@@ -86,9 +82,6 @@ The improvements are...
 
 Improvements to clang-tidy
 --------------------------
-
-- The 'btc-derived-from-sharable-stack-prohibition' check was renamed to :doc:`btc-unmanaged-derived-from-sharable
-  <clang-tidy/checks/btc-unmanaged-derived-from-sharable>`
 
 - The checks profiling info can now be stored as JSON files for futher
   post-processing and analysis.
@@ -149,7 +142,7 @@ Improvements to clang-tidy
   <clang-tidy/checks/cert-msc51-cpp>` check
 
   Detects inappropriate seeding of C++ random generators and C ``srand()`` function.
-  
+
 - New :doc:`cppcoreguidelines-avoid-goto
   <clang-tidy/checks/cppcoreguidelines-avoid-goto>` check.
 
@@ -160,7 +153,7 @@ Improvements to clang-tidy
 - New :doc:`cppcoreguidelines-narrowing-conversions
   <clang-tidy/checks/cppcoreguidelines-narrowing-conversions>` check
 
-  Checks for narrowing conversions, e. g. ``int i = 0; i += 0.1;``.
+  Checks for narrowing conversions, e.g. ``int i = 0; i += 0.1;``.
 
 - New :doc:`fuchsia-multiple-inheritance
   <clang-tidy/checks/fuchsia-multiple-inheritance>` check.
@@ -168,12 +161,12 @@ Improvements to clang-tidy
   Warns if a class inherits from multiple classes that are not pure virtual.
 
 - New `fuchsia-restrict-system-includes
-  <http://clang.llvm.org/extra/clang-tidy/checks/fuchsia-restrict-system-includes.html>`_ check
+  <https://clang.llvm.org/extra/clang-tidy/checks/fuchsia-restrict-system-includes.html>`_ check
 
   Checks for allowed system includes and suggests removal of any others.
 
 - New `fuchsia-statically-constructed-objects
-  <http://clang.llvm.org/extra/clang-tidy/checks/fuchsia-statically-constructed-objects.html>`_ check
+  <https://clang.llvm.org/extra/clang-tidy/checks/fuchsia-statically-constructed-objects.html>`_ check
 
   Warns if global, non-trivial objects with static storage are constructed,
   unless the object is statically initialized with a ``constexpr`` constructor
@@ -301,13 +294,3 @@ Improvements to clang-tidy
   <clang-tidy/checks/bugprone-unused-raii>`
 
 - The 'google-runtime-member-string-references' check was removed.
-
-Improvements to include-fixer
------------------------------
-
-The improvements are...
-
-Improvements to modularize
---------------------------
-
-The improvements are...
