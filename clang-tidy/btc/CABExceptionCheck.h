@@ -28,6 +28,8 @@ public:
   void storeOptions(ClangTidyOptions::OptionMap &Options) override;
 
 private:
+  const std::string CABExceptionMatch = "CABException";
+  const std::string CxxThrowExprMatch = "CxxThrowExpr";
   const bool mExceptionsAsPointers;
 };
 
