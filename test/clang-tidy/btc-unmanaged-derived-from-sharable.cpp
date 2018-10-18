@@ -14,6 +14,8 @@ T* data;
 int y;
 public:
 UniquePtr(){data = new T;}
+
+T &operator *() const noexcept;
 };
 
 template <typename T>
@@ -71,7 +73,7 @@ class VirtualyDerivedFromSharable : virtual public Sharable {
 
 class GodObject {
  public:
-  GodObject();
+  GodObject(DerivedFromSharable &rds_) : rds(rds_) {}
   int do_GodObject() { return 1 + ds.do_DerivedFromSharable() + vds.do_VirtualyDerivedFromSharable(); }
 
  private:
@@ -89,19 +91,30 @@ class GodObject {
   SharedPtr<VirtualyDerivedFromSharable> vds3 = CreateShared<VirtualyDerivedFromSharable>();
   UniquePtr<VirtualyDerivedFromSharable> vds4 = CreateUnique<VirtualyDerivedFromSharable>();
 
+  DerivedFromSharable &rds;
 
 
 };
 
 void f() {
-  GodObject b;
+  UniquePtr<DerivedFromSharable> dfsPtr = CreateUnique<DerivedFromSharable>();
+  GodObject b(*dfsPtr);
   b.do_GodObject();
+  auto alds = DerivedFromSharable{};
+  // CHECK-MESSAGES: :[[@LINE-1]]:8: warning: Local variable 'alds' has type
+  // derived from Sharable [btc-unmanaged-derived-from-sharable]
   DerivedFromSharable lds;
   // CHECK-MESSAGES: :[[@LINE-1]]:23: warning: Local variable 'lds' has type
+  // derived from Sharable [btc-unmanaged-derived-from-sharable]
+  const DerivedFromSharable clds;
+  // CHECK-MESSAGES: :[[@LINE-1]]:29: warning: Local variable 'clds' has type
   // derived from Sharable [btc-unmanaged-derived-from-sharable]
   VirtualyDerivedFromSharable lvds;
   // CHECK-MESSAGES: :[[@LINE-1]]:31: warning: Local variable 'lvds' has type
   // derived from Sharable [btc-unmanaged-derived-from-sharable]
   lds.do_DerivedFromSharable();
   lvds.do_VirtualyDerivedFromSharable();
+  
+  DerivedFromSharable& dfsReference = *dfsPtr;
+  const DerivedFromSharable& cdfsReference = *dfsPtr;
 }
