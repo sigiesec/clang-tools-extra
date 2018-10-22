@@ -19,8 +19,7 @@ namespace btc {
 
 const auto IsDerivedFromSharable =
     cxxRecordDecl(isDerivedFrom("Sharable")).bind("Derived");
-const auto HasTypeDerivedFromSharable = anyOf(
-    hasType(IsDerivedFromSharable), hasType(references(IsDerivedFromSharable)));
+const auto HasTypeDerivedFromSharable = hasType(IsDerivedFromSharable);
 
 void UnmanagedDerivedFromSharableCheck::registerMatchers(
     MatchFinder *Finder) {
