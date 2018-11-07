@@ -22,10 +22,20 @@ namespace btc {
 /// http://clang.llvm.org/extra/clang-tidy/checks/btc-modernize-use-auto.html
 class ModernizeUseAutoCheck : public ClangTidyCheck {
 public:
-  ModernizeUseAutoCheck(StringRef Name, ClangTidyContext *Context)
-      : ClangTidyCheck(Name, Context) {}
+  ModernizeUseAutoCheck(StringRef Name, ClangTidyContext *Context);
+  void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
+
+private:
+  void replaceIterators(const DeclStmt *D, ASTContext *Context);
+  void replaceExpr(const DeclStmt *D, ASTContext *Context,
+                   llvm::function_ref<QualType(const Expr *)> GetType,
+                   StringRef Message);
+  void replaceDecl(const DeclStmt *D, ASTContext *Context, StringRef Message);
+
+  const unsigned int MinTypeNameLength;
+  const bool RemoveStars;
 };
 
 } // namespace btc
