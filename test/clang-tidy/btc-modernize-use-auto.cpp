@@ -9,6 +9,14 @@ public:
 class MyDerivedType : public MyType {};
 
 void auto_default_initialized() {
+  const MyType ac1;
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: const auto ac1 = MyType{};
+
+  const MyType ac2 = MyType{};
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: const auto ac2 = MyType{};
+
   MyType ax = MyType{};
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto ax = MyType{};

@@ -442,8 +442,13 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
       if (TemporaryObjectExpr->getNumArgs() != 0)
         return;
 
-      // the temporary object must be the same type as the result type
-      if (TemporaryObjectExpr->getTypeSourceInfo()->getType() != FirstDeclType)
+      // the temporary object must be the same type as the result type, but the
+      // latter may be more qualified
+      const auto TemporaryType = TemporaryObjectExpr->getTypeSourceInfo()
+                                     ->getType()
+                                     .getCanonicalType();
+      if (FirstDeclType != TemporaryType &&
+          !FirstDeclType.isMoreQualifiedThan(TemporaryType))
         return;
     }
   }
@@ -465,8 +470,15 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
   const std::string VarWithInitializer =
       FirstDecl->getName().str() + " = " + TypeString + "{}";
 
+  std::string qualifierPrefix;
+  if (FirstDeclType.isConstQualified())
+    qualifierPrefix += "const ";
+  if (FirstDeclType.isVolatileQualified())
+    qualifierPrefix += "volatile ";
+
   Diag /*<< FixItHint::CreateReplacement(TypeRange, "auto")*/
-      << FixItHint::CreateReplacement(VarRange, "auto " + VarWithInitializer);
+      << FixItHint::CreateReplacement(VarRange, qualifierPrefix + "auto " +
+                                                    VarWithInitializer);
 }
 
 void ModernizeUseAutoCheck::replaceExpr(
