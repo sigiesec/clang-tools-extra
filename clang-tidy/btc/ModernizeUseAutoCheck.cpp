@@ -443,6 +443,11 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
       const auto *TemporaryObjectExpr =
           dyn_cast<CXXTemporaryObjectExpr>(MaterializeArg->GetTemporaryExpr());
 
+      if (!TemporaryObjectExpr) {
+        // FIXME can we handle this case as well?
+        return;
+      }
+
       if (TemporaryObjectExpr->getNumArgs() != 0)
         return;
 
