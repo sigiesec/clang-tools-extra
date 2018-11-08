@@ -47,6 +47,11 @@ void auto_default_initialized() {
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto b = int{};
 
+  // FIXME implement this case
+  int bArray[1];
+  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // noCHECK-FIXES: auto bArray = int[1]{};
+
   // Don't warn when 'auto' is already being used.
   auto aut = MyType{};
 }
