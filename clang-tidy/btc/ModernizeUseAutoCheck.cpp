@@ -303,9 +303,11 @@ StatementMatcher makeDeclWithTemplateCastMatcher() {
 }
 
 StatementMatcher makeDefaultInitializedMatcher() {
-  return declStmt(
-             // Match only default-initialized
-             unless(has(varDecl(unless(hasInitializer(anything()))))))
+  return declStmt()
+      // FIXME if it stays like this, rename the matcher
+      // Match only default-initialized (for user-defined types with a
+      // default ctor)
+      // unless(has(varDecl(hasInitializer(anything())))))
       .bind(DefaultInitializedDeclId);
 }
 
@@ -407,7 +409,44 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
   if (!FirstDecl)
     return;
 
+  const Expr *ExprInit = FirstDecl->getInit();
   const QualType FirstDeclType = FirstDecl->getType().getCanonicalType();
+
+  if (ExprInit) {
+    // Skip expressions with cleanups from the intializer expression.
+    if (const auto *E = dyn_cast<ExprWithCleanups>(ExprInit)) {
+      ExprInit = E->getSubExpr();
+    }
+
+    const auto *Construct = dyn_cast<CXXConstructExpr>(ExprInit);
+    if (!Construct) {
+      return;
+    }
+
+    // Ensure that the constructor receives no arguments (default ctor).
+    if (Construct->getNumArgs() != 0) {
+      // If there is an argument, it might be an elidable copy/move ctor.
+      if (!Construct->isElidable())
+        return;
+
+      // It is, now check if the inner expression constructing a temporary is
+      // default-initialized and of the same type.
+      assert(Construct->getNumArgs() == 1);
+      const auto *MaterializeArg =
+          dyn_cast<MaterializeTemporaryExpr>(Construct->getArg(0));
+      if (!MaterializeArg)
+        return;
+      const auto *TemporaryObjectExpr =
+          dyn_cast<CXXTemporaryObjectExpr>(MaterializeArg->GetTemporaryExpr());
+
+      if (TemporaryObjectExpr->getNumArgs() != 0)
+        return;
+
+      // the temporary object must be the same type as the result type
+      if (TemporaryObjectExpr->getTypeSourceInfo()->getType() != FirstDeclType)
+        return;
+    }
+  }
 
   TypeLoc TypeLoc = FirstDecl->getTypeSourceInfo()->getTypeLoc();
   SourceRange TypeRange(TypeLoc.getSourceRange());
