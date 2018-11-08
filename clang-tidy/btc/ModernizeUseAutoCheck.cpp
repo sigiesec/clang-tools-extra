@@ -455,6 +455,10 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
   TypeLoc TypeLoc = FirstDecl->getTypeSourceInfo()->getTypeLoc();
   SourceRange TypeRange(TypeLoc.getSourceRange());
+  if (!TypeRange.getBegin().isValid()) {
+    // FIXME check why this might be the case
+    return;
+  }
   auto Diag = diag(TypeRange.getBegin(), Message);
 
   // FIXME this should only match the variable name, not the whole statement
