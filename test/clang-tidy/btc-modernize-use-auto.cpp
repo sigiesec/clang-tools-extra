@@ -7,6 +7,7 @@ public:
 };
 
 using MyTypeAlias = MyType;
+using MyTypePtrAlias = MyType*;
 
 class MyDerivedType : public MyType {};
 
@@ -38,6 +39,10 @@ void auto_default_initialized() {
   MyTypeAlias aAlias;
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto aAlias = MyTypeAlias{};
+
+  MyTypePtrAlias aPtrAlias;
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
+  // CHECK-FIXES: auto aPtrAlias = MyTypePtrAlias{};
 
   // FIXME make a warning but no autofix in this case?
   // do not provide an autofix if the types do not match literally
