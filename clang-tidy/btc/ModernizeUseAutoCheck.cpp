@@ -477,12 +477,9 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
   // FIXME this should only match the variable name, not the whole statement
   const auto &VarRange = FirstDecl->getSourceRange();
 
-  // FIXME isn't there a better way to retrieve the type name?
-  auto &SourceManager = Context->getSourceManager();
-  const auto TypeString = clang::Lexer::getSourceText(
-                              clang::CharSourceRange::getTokenRange(TypeRange),
-                              SourceManager, Context->getLangOpts())
-                              .str();
+  const auto printingPolicy = PrintingPolicy{Context->getLangOpts()};
+  const auto TypeString =
+      FirstDeclType.withoutLocalFastQualifiers().getAsString(printingPolicy);
 
   const std::string VarWithInitializer =
       FirstDecl->getName().str() + " = " + TypeString + "{}";
