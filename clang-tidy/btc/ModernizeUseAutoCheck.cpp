@@ -458,8 +458,8 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
       // the temporary object must be the same type as the result type, but the
       // latter may be more qualified
-      const auto TemporaryType = TemporaryObjectExpr->getTypeSourceInfo()
-                                     ->getType();
+      const auto TemporaryType =
+          TemporaryObjectExpr->getTypeSourceInfo()->getType();
       if (FirstDeclType != TemporaryType &&
           !FirstDeclType.isMoreQualifiedThan(TemporaryType))
         return;
@@ -479,8 +479,7 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
   const auto printingPolicy = PrintingPolicy{Context->getLangOpts()};
   const auto TypeString =
-      FirstDeclType.withoutLocalFastQualifiers().getAsString(
-          printingPolicy);
+      FirstDeclType.withoutLocalFastQualifiers().getAsString(printingPolicy);
 
   const std::string VarWithInitializer =
       FirstDecl->getName().str() + " = " + TypeString + "{}";
