@@ -410,7 +410,8 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
     return;
 
   const Expr *ExprInit = FirstDecl->getInit();
-  const QualType FirstDeclType = FirstDecl->getType().getCanonicalType();
+  const QualType FirstDeclType = FirstDecl->getType();
+  const QualType FirstDeclCanonicalType = FirstDeclType.getCanonicalType();
 
   // FIXME array types are not currently supported
   if (ArrayType::classof(FirstDeclType.getTypePtr()))
@@ -458,8 +459,7 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
       // the temporary object must be the same type as the result type, but the
       // latter may be more qualified
       const auto TemporaryType = TemporaryObjectExpr->getTypeSourceInfo()
-                                     ->getType()
-                                     .getCanonicalType();
+                                     ->getType();
       if (FirstDeclType != TemporaryType &&
           !FirstDeclType.isMoreQualifiedThan(TemporaryType))
         return;
@@ -479,7 +479,7 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
   const auto printingPolicy = PrintingPolicy{Context->getLangOpts()};
   const auto TypeString =
-      FirstDecl->getType().withoutLocalFastQualifiers().getAsString(
+      FirstDeclType.withoutLocalFastQualifiers().getAsString(
           printingPolicy);
 
   const std::string VarWithInitializer =

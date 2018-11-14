@@ -39,6 +39,10 @@ void auto_default_initialized() {
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto aAlias = MyTypeAlias{};
 
+  // FIXME make a warning but no autofix in this case?
+  // do not provide an autofix if the types do not match literally
+  MyTypeAlias aAliasMismatch = MyType{};
+
   // FIXME can this somehow use auto?
   MyType *aPtr;
 
