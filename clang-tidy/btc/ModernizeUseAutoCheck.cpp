@@ -485,9 +485,9 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
       FirstDecl->getName().str() + " = " + TypeString + "{}";
 
   std::string qualifierPrefix;
-  if (FirstDeclType.isConstQualified())
+  if (FirstDeclType.isLocalConstQualified())
     qualifierPrefix += "const ";
-  if (FirstDeclType.isVolatileQualified())
+  if (FirstDeclType.isLocalVolatileQualified())
     qualifierPrefix += "volatile ";
 
   Diag /*<< FixItHint::CreateReplacement(TypeRange, "auto")*/
