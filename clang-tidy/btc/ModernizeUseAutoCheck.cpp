@@ -416,6 +416,10 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
   if (ArrayType::classof(FirstDeclType.getTypePtr()))
     return;
 
+  // FIXME pointer types cannot be default-constructed using T*{}
+  if (PointerType::classof(FirstDeclType.getTypePtr()))
+    return;
+
   if (ExprInit) {
     // Skip expressions with cleanups from the intializer expression.
     if (const auto *E = dyn_cast<ExprWithCleanups>(ExprInit)) {

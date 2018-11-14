@@ -33,10 +33,8 @@ void auto_default_initialized() {
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto az = MyType{};
 
-  // FIXME use auto* in this case
+  // FIXME can this somehow use auto?
   MyType *aPtr;
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
-  // CHECK-FIXES: auto aPtr = MyType*{};
 
   // FIXME also apply to multiple variables declared in one statement?
   MyType a1, a2;
