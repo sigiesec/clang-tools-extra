@@ -398,6 +398,43 @@ void ModernizeUseAutoCheck::replaceIterators(const DeclStmt *D,
       << FixItHint::CreateReplacement(Range, "auto");
 }
 
+bool ModernizeUseAutoCheck::handleConstructExpr(
+    const CXXConstructExpr *Construct, const QualType &FirstDeclType) {
+  // Ensure that the constructor receives no arguments (default ctor).
+  if (Construct->getNumArgs() != 0) {
+    // If there is an argument, it might be an elidable copy/move ctor.
+    if (!Construct->isElidable())
+      return false;
+
+    // It is, now check if the inner expression constructing a temporary is
+    // default-initialized and of the same type.
+    assert(Construct->getNumArgs() == 1);
+    const auto *MaterializeArg =
+        dyn_cast<MaterializeTemporaryExpr>(Construct->getArg(0));
+    if (!MaterializeArg)
+      return false;
+    const auto *TemporaryObjectExpr =
+        dyn_cast<CXXTemporaryObjectExpr>(MaterializeArg->GetTemporaryExpr());
+
+    if (!TemporaryObjectExpr) {
+      // FIXME can we handle this case as well?
+      return false;
+    }
+
+    if (TemporaryObjectExpr->getNumArgs() != 0)
+      return false;
+
+    // the temporary object must be the same type as the result type, but the
+    // latter may be more qualified
+    const auto TemporaryType =
+        TemporaryObjectExpr->getTypeSourceInfo()->getType();
+    if (FirstDeclType != TemporaryType &&
+        !FirstDeclType.isMoreQualifiedThan(TemporaryType))
+      return false;
+  }
+  return true;
+}
+
 void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
                                         StringRef Message) {
   // FIXME: support multiple declarations
@@ -428,41 +465,11 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
     }
 
     const auto *Construct = dyn_cast<CXXConstructExpr>(ExprInit);
-    if (!Construct) {
+    if (Construct) {
+      if (!handleConstructExpr(Construct, FirstDeclType))
+        return;
+    } else {
       return;
-    }
-
-    // Ensure that the constructor receives no arguments (default ctor).
-    if (Construct->getNumArgs() != 0) {
-      // If there is an argument, it might be an elidable copy/move ctor.
-      if (!Construct->isElidable())
-        return;
-
-      // It is, now check if the inner expression constructing a temporary is
-      // default-initialized and of the same type.
-      assert(Construct->getNumArgs() == 1);
-      const auto *MaterializeArg =
-          dyn_cast<MaterializeTemporaryExpr>(Construct->getArg(0));
-      if (!MaterializeArg)
-        return;
-      const auto *TemporaryObjectExpr =
-          dyn_cast<CXXTemporaryObjectExpr>(MaterializeArg->GetTemporaryExpr());
-
-      if (!TemporaryObjectExpr) {
-        // FIXME can we handle this case as well?
-        return;
-      }
-
-      if (TemporaryObjectExpr->getNumArgs() != 0)
-        return;
-
-      // the temporary object must be the same type as the result type, but the
-      // latter may be more qualified
-      const auto TemporaryType =
-          TemporaryObjectExpr->getTypeSourceInfo()->getType();
-      if (FirstDeclType != TemporaryType &&
-          !FirstDeclType.isMoreQualifiedThan(TemporaryType))
-        return;
     }
   }
 

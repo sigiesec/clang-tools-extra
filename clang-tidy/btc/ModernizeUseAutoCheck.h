@@ -34,6 +34,9 @@ private:
                    StringRef Message);
   void replaceDecl(const DeclStmt *D, ASTContext *Context, StringRef Message);
 
+  bool handleConstructExpr(const CXXConstructExpr *Construct,
+                           const QualType &FirstDeclType);
+
   const unsigned int MinTypeNameLength;
   const bool RemoveStars;
 };
