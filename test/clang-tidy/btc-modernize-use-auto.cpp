@@ -12,31 +12,31 @@ class MyDerivedType : public MyType {};
 
 void auto_default_initialized() {
   const MyType ac1;
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:9: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: const auto ac1 = MyType{};
 
   const MyType ac2 = MyType{};
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:9: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: const auto ac2 = MyType{};
 
   MyType ax = MyType{};
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto ax = MyType{};
 
   MyType ay = MyType();
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto ay = MyType{};
 
   MyType a;
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto a = MyType{};
 
   MyType az = {};
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto az = MyType{};
 
   MyTypeAlias aAlias;
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto aAlias = MyTypeAlias{};
 
   // FIXME can this somehow use auto?
@@ -44,16 +44,16 @@ void auto_default_initialized() {
 
   // FIXME also apply to multiple variables declared in one statement?
   MyType a1, a2;
-  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // noCHECK-FIXES: auto a1 = MyType{}; auto a2 = MyType{};
 
   int b;
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto b = int{};
 
   // FIXME implement this case
   int bArray[1];
-  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // noCHECK-FIXES: auto bArray = int[1]{};
 
   // Don't warn when 'auto' is already being used.
