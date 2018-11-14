@@ -479,7 +479,8 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
   const auto printingPolicy = PrintingPolicy{Context->getLangOpts()};
   const auto TypeString =
-      FirstDeclType.withoutLocalFastQualifiers().getAsString(printingPolicy);
+      FirstDecl->getType().withoutLocalFastQualifiers().getAsString(
+          printingPolicy);
 
   const std::string VarWithInitializer =
       FirstDecl->getName().str() + " = " + TypeString + "{}";

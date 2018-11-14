@@ -6,6 +6,8 @@ public:
   explicit MyType(int) {}
 };
 
+using MyTypeAlias = MyType;
+
 class MyDerivedType : public MyType {};
 
 void auto_default_initialized() {
@@ -32,6 +34,10 @@ void auto_default_initialized() {
   MyType az = {};
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto az = MyType{};
+
+  MyTypeAlias aAlias;
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto aAlias = MyTypeAlias{};
 
   // FIXME can this somehow use auto?
   MyType *aPtr;
