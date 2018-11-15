@@ -11,8 +11,23 @@ public:
   MyTypeWithDefaultArguments(int x = 0);
 };
 
+template <typename T>
+class MyTemplate {
+  void member_function() {
+    MyType ac1;
+    // CHECK-MESSAGES: :[[@LINE-1]]:5: warning: use auto when declaring a default-initialized variable
+    // CHECK-FIXES: auto ac1 = MyType{};
+
+    T t;
+    // CHECK-MESSAGES: :[[@LINE-1]]:5: warning: use auto when declaring a default-initialized variable
+    // CHECK-FIXES: auto t = T{};
+  }
+};
+
+template class MyTemplate<int>;
+
 using MyTypeAlias = MyType;
-using MyTypePtrAlias = MyType*;
+using MyTypePtrAlias = MyType *;
 using MyTypeConstAlias = const MyType;
 
 class MyDerivedType : public MyType {};
@@ -125,7 +140,7 @@ void auto_initialized_from_other_expression() {
   // FIXME implement this case
   long b = 4 + 5;
   // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
-  // noCHECK-FIXES: auto b = long{4 + 5};  
+  // noCHECK-FIXES: auto b = long{4 + 5};
 }
 
 // Don't warn for parameters, both for declarations and definitions.
@@ -140,4 +155,3 @@ class OtherType {
 
 //   * Use {{}} for regular expressions.
 // ex.: {{^}}void awesome_f();{{$}}
-
