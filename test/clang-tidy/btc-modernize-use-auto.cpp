@@ -120,6 +120,8 @@ void auto_non_default_initialized() {
 }
 
 MyType MakeMyType();
+MyType MakeMyType(int);
+MyTypeAlias MakeMyTypeAlias();
 
 void auto_initialized_from_single_function_call() {
   MyType a = MakeMyType();
@@ -129,6 +131,18 @@ void auto_initialized_from_single_function_call() {
   MyType a1(MakeMyType());
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto a1 = MakeMyType();
+
+  MyType a2 = MakeMyType(42);
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto a2 = MakeMyType(42);
+
+  MyTypeAlias a3 = MakeMyTypeAlias();
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto a3 = MakeMyTypeAlias();
+
+  // FIXME create a warning but no autofix in this case? or create an autofix for auto b = MyTypeAlias{MakeMyType()};
+  // do not fix if the types do not match
+  MyType a4 = MakeMyTypeAlias();
 
   // FIXME create a warning but no autofix in this case? or create an autofix for auto b = MyTypeAlias{MakeMyType()};
   // do not fix if the types do not match
