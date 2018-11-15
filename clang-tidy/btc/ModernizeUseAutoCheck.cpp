@@ -469,8 +469,6 @@ ModernizeUseAutoCheck::handleCallExpr(const CallExpr *Call, ASTContext *Context,
       !FirstDeclType.isMoreQualifiedThan(ResultType))
     return {};
 
-  // FIXME in this case, the call expression must be preserved (instead of
-  // replacing it with a default construction)
   return tooling::fixit::getText(Call->getSourceRange(), *Context);
 }
 
