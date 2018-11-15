@@ -398,13 +398,15 @@ void ModernizeUseAutoCheck::replaceIterators(const DeclStmt *D,
       << FixItHint::CreateReplacement(Range, "auto");
 }
 
-bool ModernizeUseAutoCheck::handleConstructExpr(
-    const CXXConstructExpr *Construct, const QualType &FirstDeclType) {
+std::string
+ModernizeUseAutoCheck::handleConstructExpr(const CXXConstructExpr *Construct,
+                                           ASTContext *Context,
+                                           const QualType &FirstDeclType) {
   // Ensure that the constructor receives no arguments (default ctor).
   if (Construct->getNumArgs() != 0) {
     // If there is an argument, it might be an elidable copy/move ctor.
     if (!Construct->isElidable())
-      return false;
+      return {};
 
     // It is, now check if the inner expression constructing a temporary is
     // default-initialized and of the same type.
@@ -412,27 +414,58 @@ bool ModernizeUseAutoCheck::handleConstructExpr(
     const auto *MaterializeArg =
         dyn_cast<MaterializeTemporaryExpr>(Construct->getArg(0));
     if (!MaterializeArg)
-      return false;
+      return {};
+
+    const auto *TemporaryExpr = MaterializeArg->GetTemporaryExpr();
+
     const auto *TemporaryObjectExpr =
-        dyn_cast<CXXTemporaryObjectExpr>(MaterializeArg->GetTemporaryExpr());
+        dyn_cast<CXXTemporaryObjectExpr>(TemporaryExpr);
+    if (TemporaryObjectExpr) {
+      if (TemporaryObjectExpr->getNumArgs() != 0)
+        return {};
 
-    if (!TemporaryObjectExpr) {
-      // FIXME can we handle this case as well?
-      return false;
+      // the temporary object must be the same type as the result type, but the
+      // latter may be more qualified
+      const auto TemporaryType =
+          TemporaryObjectExpr->getTypeSourceInfo()->getType();
+      if (FirstDeclType != TemporaryType &&
+          !FirstDeclType.isMoreQualifiedThan(TemporaryType))
+        return {};
+    } else {
+      const auto *Call = dyn_cast<CallExpr>(TemporaryExpr);
+      if (Call) {
+        return handleCallExpr(Call, Context, FirstDeclType);
+      } else {
+        // FIXME can we handle this case as well?
+        return {};
+      }
     }
-
-    if (TemporaryObjectExpr->getNumArgs() != 0)
-      return false;
-
-    // the temporary object must be the same type as the result type, but the
-    // latter may be more qualified
-    const auto TemporaryType =
-        TemporaryObjectExpr->getTypeSourceInfo()->getType();
-    if (FirstDeclType != TemporaryType &&
-        !FirstDeclType.isMoreQualifiedThan(TemporaryType))
-      return false;
   }
-  return true;
+
+  return makeDefaultInitializerExpression(Context, FirstDeclType);
+}
+
+std::string ModernizeUseAutoCheck::makeDefaultInitializerExpression(
+    ASTContext *Context, const QualType &FirstDeclType) {
+  const auto printingPolicy = PrintingPolicy{Context->getLangOpts()};
+  const auto TypeString =
+      FirstDeclType.withoutLocalFastQualifiers().getAsString(printingPolicy);
+
+  return TypeString + "{}";
+}
+
+std::string
+ModernizeUseAutoCheck::handleCallExpr(const CallExpr *Call, ASTContext *Context,
+                                      const QualType &FirstDeclType) {
+  // TODO this is duplicated from the handling of a TemporaryObjectExpr
+  const auto ResultType = Call->getType();
+  if (FirstDeclType != ResultType &&
+      !FirstDeclType.isMoreQualifiedThan(ResultType))
+    return {};
+
+  // FIXME in this case, the call expression must be preserved (instead of
+  // replacing it with a default construction)
+  return tooling::fixit::getText(Call->getSourceRange(), *Context);
 }
 
 void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
@@ -458,6 +491,7 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
   if (PointerType::classof(FirstDeclType.getTypePtr()))
     return;
 
+  std::string Initializer;
   if (ExprInit) {
     // Skip expressions with cleanups from the intializer expression.
     if (const auto *E = dyn_cast<ExprWithCleanups>(ExprInit)) {
@@ -466,12 +500,18 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
     const auto *Construct = dyn_cast<CXXConstructExpr>(ExprInit);
     if (Construct) {
-      if (!handleConstructExpr(Construct, FirstDeclType))
+      if ((Initializer = handleConstructExpr(Construct, Context, FirstDeclType))
+              .empty()) {
         return;
+      }
     } else {
       return;
     }
+  } else {
+    Initializer = makeDefaultInitializerExpression(Context, FirstDeclType);
   }
+
+  assert(!Initializer.empty());
 
   TypeLoc TypeLoc = FirstDecl->getTypeSourceInfo()->getTypeLoc();
   SourceRange TypeRange(TypeLoc.getSourceRange());
@@ -484,13 +524,6 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
   // FIXME this should only match the variable name, not the whole statement
   const auto &VarRange = FirstDecl->getSourceRange();
 
-  const auto printingPolicy = PrintingPolicy{Context->getLangOpts()};
-  const auto TypeString =
-      FirstDeclType.withoutLocalFastQualifiers().getAsString(printingPolicy);
-
-  const std::string VarWithInitializer =
-      FirstDecl->getName().str() + " = " + TypeString + "{}";
-
   std::string qualifierPrefix;
   if (FirstDeclType.isLocalConstQualified())
     qualifierPrefix += "const ";
@@ -499,7 +532,8 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
   Diag /*<< FixItHint::CreateReplacement(TypeRange, "auto")*/
       << FixItHint::CreateReplacement(VarRange, qualifierPrefix + "auto " +
-                                                    VarWithInitializer);
+                                                    FirstDecl->getName().str() +
+                                                    " = " + Initializer);
 }
 
 void ModernizeUseAutoCheck::replaceExpr(

@@ -95,6 +95,30 @@ void auto_non_default_initialized() {
   // noCHECK-FIXES: auto c = MyType{42};
 }
 
+MyType MakeMyType();
+
+void auto_initialized_from_single_function_call() {
+  MyType a = MakeMyType();
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto a = MakeMyType();
+
+  // FIXME create a warning but no autofix in this case? or create an autofix for auto b = MyTypeAlias{MakeMyType()};
+  // do not fix if the types do not match
+  MyTypeAlias b = MakeMyType();
+}
+
+void auto_initialized_from_other_expression() {
+  // FIXME implement this case
+  int a = 4 + 5;
+  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // noCHECK-FIXES: auto a = 4 + 5;
+
+  // FIXME implement this case
+  long b = 4 + 5;
+  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // noCHECK-FIXES: auto b = long{4 + 5};  
+}
+
 // Don't warn for parameters, both for declarations and definitions.
 void func(MyType myVar);
 void func(MyType myVar) {}

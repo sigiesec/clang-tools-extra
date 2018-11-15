@@ -34,8 +34,16 @@ private:
                    StringRef Message);
   void replaceDecl(const DeclStmt *D, ASTContext *Context, StringRef Message);
 
-  bool handleConstructExpr(const CXXConstructExpr *Construct,
-                           const QualType &FirstDeclType);
+  std::string handleConstructExpr(const CXXConstructExpr *Construct,
+                                  ASTContext *Context,
+                                  const QualType &FirstDeclType);
+
+  std::string handleCallExpr(const CallExpr *Call, ASTContext *Context,
+                             const QualType &FirstDeclType);
+
+  static std::string
+  makeDefaultInitializerExpression(ASTContext *Context,
+                                   const QualType &FirstDeclType);
 
   const unsigned int MinTypeNameLength;
   const bool RemoveStars;
