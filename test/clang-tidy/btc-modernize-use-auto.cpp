@@ -126,6 +126,10 @@ void auto_initialized_from_single_function_call() {
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto a = MakeMyType();
 
+  MyType a1(MakeMyType());
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto a1 = MakeMyType();
+
   // FIXME create a warning but no autofix in this case? or create an autofix for auto b = MyTypeAlias{MakeMyType()};
   // do not fix if the types do not match
   MyTypeAlias b = MakeMyType();
