@@ -474,6 +474,11 @@ ModernizeUseAutoCheck::handleCallExpr(const CallExpr *Call, ASTContext *Context,
 
 void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
                                         StringRef Message) {
+  auto debug = tooling::fixit::getText(D->getSourceRange(), *Context).str();
+  if (debug.find(" sign") != std::string::npos) {
+    puts("");
+  }
+
   // FIXME: support multiple declarations
   if (!D->isSingleDecl())
     return;
@@ -509,7 +514,14 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
         return;
       }
     } else {
-      return;
+      const auto *Call = dyn_cast<CallExpr>(ExprInit);
+      if (Call) {
+        if ((Initializer = handleCallExpr(Call, Context, FirstDeclType))
+                .empty()) {
+          return;
+        }
+      } else
+        return;
     }
   } else {
     Initializer = makeDefaultInitializerExpression(Context, FirstDeclType);
