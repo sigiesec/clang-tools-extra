@@ -6,6 +6,11 @@ public:
   explicit MyType(int) {}
 };
 
+class MyTypeWithDefaultArguments {
+public:
+  MyTypeWithDefaultArguments(int x = 0);
+};
+
 using MyTypeAlias = MyType;
 using MyTypePtrAlias = MyType*;
 using MyTypeConstAlias = const MyType;
@@ -64,6 +69,10 @@ void auto_default_initialized() {
   MyType a1, a2;
   // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // noCHECK-FIXES: auto a1 = MyType{}; auto a2 = MyType{};
+
+  MyTypeWithDefaultArguments xDefault;
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
+  // CHECK-FIXES: auto xDefault = MyTypeWithDefaultArguments{};
 
   int b;
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable

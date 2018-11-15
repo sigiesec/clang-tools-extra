@@ -404,40 +404,46 @@ ModernizeUseAutoCheck::handleConstructExpr(const CXXConstructExpr *Construct,
                                            const QualType &FirstDeclType) {
   // Ensure that the constructor receives no arguments (default ctor).
   if (Construct->getNumArgs() != 0) {
-    // If there is an argument, it might be an elidable copy/move ctor.
-    if (!Construct->isElidable())
-      return {};
-
-    // It is, now check if the inner expression constructing a temporary is
-    // default-initialized and of the same type.
-    assert(Construct->getNumArgs() == 1);
-    const auto *MaterializeArg =
-        dyn_cast<MaterializeTemporaryExpr>(Construct->getArg(0));
-    if (!MaterializeArg)
-      return {};
-
-    const auto *TemporaryExpr = MaterializeArg->GetTemporaryExpr();
-
-    const auto *TemporaryObjectExpr =
-        dyn_cast<CXXTemporaryObjectExpr>(TemporaryExpr);
-    if (TemporaryObjectExpr) {
-      if (TemporaryObjectExpr->getNumArgs() != 0)
+    // If there is a non-default argument, it might be an elidable copy/move
+    // ctor.
+    if (Construct->isElidable()) {
+      // It is, now check if the inner expression constructing a temporary is
+      // default-initialized and of the same type.
+      assert(Construct->getNumArgs() == 1);
+      const auto *MaterializeArg =
+          dyn_cast<MaterializeTemporaryExpr>(Construct->getArg(0));
+      if (!MaterializeArg)
         return {};
 
-      // the temporary object must be the same type as the result type, but the
-      // latter may be more qualified
-      const auto TemporaryType =
-          TemporaryObjectExpr->getTypeSourceInfo()->getType();
-      if (FirstDeclType != TemporaryType &&
-          !FirstDeclType.isMoreQualifiedThan(TemporaryType))
-        return {};
-    } else {
-      const auto *Call = dyn_cast<CallExpr>(TemporaryExpr);
-      if (Call) {
-        return handleCallExpr(Call, Context, FirstDeclType);
+      const auto *TemporaryExpr = MaterializeArg->GetTemporaryExpr();
+
+      const auto *TemporaryObjectExpr =
+          dyn_cast<CXXTemporaryObjectExpr>(TemporaryExpr);
+      if (TemporaryObjectExpr) {
+        if (TemporaryObjectExpr->getNumArgs() != 0)
+          return {};
+
+        // the temporary object must be the same type as the result type, but
+        // the latter may be more qualified
+        const auto TemporaryType =
+            TemporaryObjectExpr->getTypeSourceInfo()->getType();
+        if (FirstDeclType != TemporaryType &&
+            !FirstDeclType.isMoreQualifiedThan(TemporaryType))
+          return {};
       } else {
-        // FIXME can we handle this case as well?
-        return {};
+        const auto *Call = dyn_cast<CallExpr>(TemporaryExpr);
+        if (Call) {
+          return handleCallExpr(Call, Context, FirstDeclType);
+        } else {
+          // FIXME can we handle this case as well?
+          return {};
+        }
+      }
+    } else {
+      // There may be any number of default arguments.
+      for (const auto &arg : Construct->arguments()) {
+        if (!dyn_cast<const CXXDefaultArgExpr>(arg))
+          return {};
       }
     }
   }
