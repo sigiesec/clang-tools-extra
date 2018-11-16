@@ -32,14 +32,21 @@ private:
   void replaceExpr(const DeclStmt *D, ASTContext *Context,
                    llvm::function_ref<QualType(const Expr *)> GetType,
                    StringRef Message);
-  void replaceDecl(const DeclStmt *D, ASTContext *Context, StringRef Message);
+  void replaceDecl(const DeclStmt *D, ASTContext *Context);
 
-  std::string handleConstructExpr(const CXXConstructExpr *Construct,
-                                  ASTContext *Context,
-                                  const QualType &FirstDeclType);
+  struct ReplaceDeclData {
+    std::string newInitializerExpression;
+    std::string conditionMessageFragment;
 
-  std::string handleCallExpr(const CallExpr *Call, ASTContext *Context,
-                             const QualType &FirstDeclType);
+    explicit operator bool() const { return !newInitializerExpression.empty(); }
+  };
+
+  ReplaceDeclData handleConstructExpr(const CXXConstructExpr *Construct,
+                                      ASTContext *Context,
+                                      const QualType &FirstDeclType);
+
+  ReplaceDeclData handleCallExpr(const CallExpr *Call, ASTContext *Context,
+                                 const QualType &FirstDeclType);
 
   static std::string
   makeDefaultInitializerExpression(ASTContext *Context,

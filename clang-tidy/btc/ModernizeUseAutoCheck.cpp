@@ -28,7 +28,12 @@ const char IteratorDeclStmtId[] = "iterator_decl";
 const char DeclWithNewId[] = "decl_new";
 const char DeclWithCastId[] = "decl_cast";
 const char DeclWithTemplateCastId[] = "decl_template";
-const char DefaultInitializedDeclId[] = "decl_default";
+const char AnyDeclId[] = "decl_default";
+const char AutoBaseMessage[] = "use auto";
+const char AutoDefaultInitialized[] =
+    "when declaring a default-initialized variable";
+const char AutoFunctionCallResult[] =
+    "when initializing from a function call result";
 
 size_t GetTypeNameLength(bool RemoveStars, StringRef Text) {
   enum CharType { Space, Alpha, Punctuation };
@@ -308,7 +313,7 @@ StatementMatcher makeDefaultInitializedMatcher() {
       // Match only default-initialized (for user-defined types with a
       // default ctor)
       // unless(has(varDecl(hasInitializer(anything())))))
-      .bind(DefaultInitializedDeclId);
+      .bind(AnyDeclId);
 }
 
 StatementMatcher makeCombinedMatcher() {
@@ -398,7 +403,7 @@ void ModernizeUseAutoCheck::replaceIterators(const DeclStmt *D,
       << FixItHint::CreateReplacement(Range, "auto");
 }
 
-std::string
+ModernizeUseAutoCheck::ReplaceDeclData
 ModernizeUseAutoCheck::handleConstructExpr(const CXXConstructExpr *Construct,
                                            ASTContext *Context,
                                            const QualType &FirstDeclType) {
@@ -448,7 +453,8 @@ ModernizeUseAutoCheck::handleConstructExpr(const CXXConstructExpr *Construct,
     }
   }
 
-  return makeDefaultInitializerExpression(Context, FirstDeclType);
+  return {makeDefaultInitializerExpression(Context, FirstDeclType),
+          AutoDefaultInitialized};
 }
 
 std::string ModernizeUseAutoCheck::makeDefaultInitializerExpression(
@@ -460,7 +466,7 @@ std::string ModernizeUseAutoCheck::makeDefaultInitializerExpression(
   return TypeString + "{}";
 }
 
-std::string
+ModernizeUseAutoCheck::ReplaceDeclData
 ModernizeUseAutoCheck::handleCallExpr(const CallExpr *Call, ASTContext *Context,
                                       const QualType &FirstDeclType) {
   // TODO this is duplicated from the handling of a TemporaryObjectExpr
@@ -469,11 +475,12 @@ ModernizeUseAutoCheck::handleCallExpr(const CallExpr *Call, ASTContext *Context,
       !FirstDeclType.isMoreQualifiedThan(ResultType))
     return {};
 
-  return tooling::fixit::getText(Call->getSourceRange(), *Context);
+  return {tooling::fixit::getText(Call->getSourceRange(), *Context),
+          AutoFunctionCallResult};
 }
 
-void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
-                                        StringRef Message) {
+void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D,
+                                        ASTContext *Context) {
   auto debug = tooling::fixit::getText(D->getSourceRange(), *Context).str();
   if (debug.find(" sign") != std::string::npos) {
     puts("");
@@ -500,7 +507,8 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
   if (PointerType::classof(FirstDeclType.getTypePtr()))
     return;
 
-  std::string Initializer;
+  std::string Message = AutoBaseMessage;
+  ReplaceDeclData ReplaceDeclDataResult;
   if (ExprInit) {
     // Skip expressions with cleanups from the intializer expression.
     if (const auto *E = dyn_cast<ExprWithCleanups>(ExprInit)) {
@@ -509,25 +517,30 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
 
     const auto *Construct = dyn_cast<CXXConstructExpr>(ExprInit);
     if (Construct) {
-      if ((Initializer = handleConstructExpr(Construct, Context, FirstDeclType))
-              .empty()) {
+      if (!(ReplaceDeclDataResult =
+                handleConstructExpr(Construct, Context, FirstDeclType))) {
         return;
       }
     } else {
       const auto *Call = dyn_cast<CallExpr>(ExprInit);
       if (Call) {
-        if ((Initializer = handleCallExpr(Call, Context, FirstDeclType))
-                .empty()) {
+        if (!(ReplaceDeclDataResult =
+                  handleCallExpr(Call, Context, FirstDeclType))) {
           return;
         }
       } else
         return;
     }
   } else {
-    Initializer = makeDefaultInitializerExpression(Context, FirstDeclType);
+    ReplaceDeclDataResult = {
+        makeDefaultInitializerExpression(Context, FirstDeclType),
+        AutoDefaultInitialized};
   }
 
-  assert(!Initializer.empty());
+  assert(!ReplaceDeclDataResult.newInitializerExpression.empty());
+  if (!ReplaceDeclDataResult.conditionMessageFragment.empty()) {
+    Message += " " + ReplaceDeclDataResult.conditionMessageFragment;
+  }
 
   TypeLoc TypeLoc = FirstDecl->getTypeSourceInfo()->getTypeLoc();
   SourceRange TypeRange(TypeLoc.getSourceRange());
@@ -547,9 +560,10 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D, ASTContext *Context,
     qualifierPrefix += "volatile ";
 
   Diag /*<< FixItHint::CreateReplacement(TypeRange, "auto")*/
-      << FixItHint::CreateReplacement(VarRange, qualifierPrefix + "auto " +
-                                                    FirstDecl->getName().str() +
-                                                    " = " + Initializer);
+      << FixItHint::CreateReplacement(
+             VarRange, qualifierPrefix + "auto " + FirstDecl->getName().str() +
+                           " = " +
+                           ReplaceDeclDataResult.newInitializerExpression);
 }
 
 void ModernizeUseAutoCheck::replaceExpr(
@@ -661,10 +675,8 @@ void ModernizeUseAutoCheck::check(const MatchFinder::MatchResult &Result) {
         },
         "use auto when initializing with a template cast to avoid duplicating "
         "the type name");
-  } else if (const auto *Decl =
-                 Result.Nodes.getNodeAs<DeclStmt>(DefaultInitializedDeclId)) {
-    replaceDecl(Decl, Result.Context,
-                "use auto when declaring a default-initialized variable");
+  } else if (const auto *Decl = Result.Nodes.getNodeAs<DeclStmt>(AnyDeclId)) {
+    replaceDecl(Decl, Result.Context);
   } else {
     llvm_unreachable("Bad Callback. No node provided.");
   }
