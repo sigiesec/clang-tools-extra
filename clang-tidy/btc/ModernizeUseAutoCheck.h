@@ -45,8 +45,8 @@ private:
                                       ASTContext *Context,
                                       const QualType &FirstDeclType);
 
-  ReplaceDeclData handleCallExpr(const CallExpr *Call, ASTContext *Context,
-                                 const QualType &FirstDeclType);
+  ReplaceDeclData handleExpr(const Expr *ExprNode, ASTContext *Context,
+                             const QualType &FirstDeclType);
 
   static std::string
   makeDefaultInitializerExpression(ASTContext *Context,

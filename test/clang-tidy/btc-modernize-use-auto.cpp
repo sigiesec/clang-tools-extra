@@ -98,6 +98,10 @@ void auto_default_initialized() {
   // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // noCHECK-FIXES: auto bArray = int[1]{};
 
+  // auto uShort = unsigned short{}; would not be valid because unsigned short is not a "single-word type name"
+  // FIXME create a warning but no autofix?
+  unsigned short uShort;
+
   // Don't warn when 'auto' is already being used.
   auto aut = MyType{};
 }

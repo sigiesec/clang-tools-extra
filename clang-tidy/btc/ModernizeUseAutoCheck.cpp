@@ -32,8 +32,8 @@ const char AnyDeclId[] = "decl_default";
 const char AutoBaseMessage[] = "use auto";
 const char AutoDefaultInitialized[] =
     "when declaring a default-initialized variable";
-const char AutoFunctionCallResult[] =
-    "when initializing from a function call result";
+const char AutoExpressionResult[] =
+    "when initializing from an expression result";
 
 size_t GetTypeNameLength(bool RemoveStars, StringRef Text) {
   enum CharType { Space, Alpha, Punctuation };
@@ -436,13 +436,7 @@ ModernizeUseAutoCheck::handleConstructExpr(const CXXConstructExpr *Construct,
             !FirstDeclType.isMoreQualifiedThan(TemporaryType))
           return {};
       } else {
-        const auto *Call = dyn_cast<CallExpr>(TemporaryExpr);
-        if (Call) {
-          return handleCallExpr(Call, Context, FirstDeclType);
-        } else {
-          // FIXME can we handle this case as well?
-          return {};
-        }
+        return handleExpr(TemporaryExpr, Context, FirstDeclType);
       }
     } else {
       // There may be any number of default arguments.
@@ -467,16 +461,25 @@ std::string ModernizeUseAutoCheck::makeDefaultInitializerExpression(
 }
 
 ModernizeUseAutoCheck::ReplaceDeclData
-ModernizeUseAutoCheck::handleCallExpr(const CallExpr *Call, ASTContext *Context,
-                                      const QualType &FirstDeclType) {
+ModernizeUseAutoCheck::handleExpr(const Expr *ExprNode, ASTContext *Context,
+                                  const QualType &FirstDeclType) {
+  if (dyn_cast<ImplicitCastExpr>(ExprNode)) {
+    // FIXME in this case, an explicit initialization or cast must be added
+    return {};
+  }
+
   // TODO this is duplicated from the handling of a TemporaryObjectExpr
-  const auto ResultType = Call->getType();
+  const auto ResultType = ExprNode->getType();
+  if (ResultType.isNull()) {
+    // FIXME handle a case like "pair<_FwdIt, _FwdIt> _Found(_First, _First);"
+    return {};
+  }
   if (FirstDeclType != ResultType &&
       !FirstDeclType.isMoreQualifiedThan(ResultType))
     return {};
 
-  return {tooling::fixit::getText(Call->getSourceRange(), *Context),
-          AutoFunctionCallResult};
+  return {tooling::fixit::getText(ExprNode->getSourceRange(), *Context),
+          AutoExpressionResult};
 }
 
 void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D,
@@ -498,6 +501,16 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D,
   const Expr *ExprInit = FirstDecl->getInit();
   const QualType FirstDeclType = FirstDecl->getType();
   const QualType FirstDeclCanonicalType = FirstDeclType.getCanonicalType();
+
+  const auto *FirstDeclBuiltinType =
+      dyn_cast<BuiltinType>(FirstDeclType.getTypePtr());
+  if (FirstDeclBuiltinType &&
+      FirstDeclBuiltinType->getName(PrintingPolicy{Context->getLangOpts()})
+              .str()
+              .find(" ") != std::string::npos) {
+    // a non-single-word type name
+    return;
+  }
 
   // FIXME array types are not currently supported
   if (ArrayType::classof(FirstDeclType.getTypePtr()))
@@ -522,14 +535,10 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D,
         return;
       }
     } else {
-      const auto *Call = dyn_cast<CallExpr>(ExprInit);
-      if (Call) {
-        if (!(ReplaceDeclDataResult =
-                  handleCallExpr(Call, Context, FirstDeclType))) {
-          return;
-        }
-      } else
+      if (!(ReplaceDeclDataResult =
+                handleExpr(ExprInit, Context, FirstDeclType))) {
         return;
+      }
     }
   } else {
     ReplaceDeclDataResult = {
