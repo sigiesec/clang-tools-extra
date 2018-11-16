@@ -160,10 +160,9 @@ void auto_initialized_from_single_function_call() {
 }
 
 void auto_initialized_from_other_expression() {
-  // FIXME implement this case
   int a = 4 + 5;
-  // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
-  // noCHECK-FIXES: auto a = 4 + 5;
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto a = 4 + 5;
 
   // FIXME implement this case
   long b = 4 + 5;
