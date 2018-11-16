@@ -11,6 +11,18 @@ public:
   MyTypeWithDefaultArguments(int x = 0);
 };
 
+template<typename T>
+struct ConversionSource {  
+};
+
+template<typename T>
+struct ConversionTarget {
+  ConversionTarget(ConversionSource<T> src);
+};
+
+template<typename T>
+ConversionSource<T> MakeConversionSource(T value);
+
 template <typename T>
 class MyTemplate {
   void member_function() {
@@ -21,6 +33,11 @@ class MyTemplate {
     T t;
     // CHECK-MESSAGES: :[[@LINE-1]]:5: warning: use auto when declaring a default-initialized variable
     // CHECK-FIXES: auto t = T{};
+
+    // FIXME support this case
+    ConversionTarget<T> implicitlyConverted = MakeConversionSource(T{});
+    // noCHECK-MESSAGES: :[[@LINE-1]]:5: warning: use auto ...
+    // noCHECK-FIXES: auto implicitlyConverted = ConversionTarget<T>{MakeConversionSource(T{})};
   }
 };
 
