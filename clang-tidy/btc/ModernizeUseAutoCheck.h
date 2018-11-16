@@ -48,9 +48,12 @@ private:
   ReplaceDeclData handleExpr(const Expr *ExprNode, ASTContext *Context,
                              const QualType &FirstDeclType);
 
-  static std::string
+  static ReplaceDeclData
   makeDefaultInitializerExpression(ASTContext *Context,
                                    const QualType &FirstDeclType);
+
+  static std::string makeTypeString(ASTContext *Context,
+                                    const QualType &FirstDeclType);
 
   const unsigned int MinTypeNameLength;
   const bool RemoveStars;

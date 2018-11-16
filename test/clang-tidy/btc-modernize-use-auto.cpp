@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s btc-modernize-use-auto %t -- -- -std=c++11 -frtti
+// RUN: %check_clang_tidy %s btc-modernize-use-auto %t -- -config="{CheckOptions: [{key: btc-modernize-use-auto.MinTypeNameLength, value: '0'}]}" -- -std=c++11 -frtti
 
 class MyType {
 public:
@@ -61,9 +61,8 @@ void auto_default_initialized() {
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto aAlias = MyTypeAlias{};
 
+  // no initialization, cannot use auto to achieve this, auto will always 0-initialize
   MyTypePtrAlias aPtrAlias;
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
-  // CHECK-FIXES: auto aPtrAlias = MyTypePtrAlias{};
 
   MyTypeConstAlias aConstAlias;
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
@@ -89,18 +88,25 @@ void auto_default_initialized() {
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // CHECK-FIXES: auto xDefault = MyTypeWithDefaultArguments{};
 
+  // no initialization, cannot use auto to achieve this, auto will always 0-initialize
   int b;
+
+  int b2 = int{};
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when initializing with a cast to avoid duplicating the type name
+  // CHECK-FIXES: auto b2 = int{};
+
+  int b3 = {};
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
-  // CHECK-FIXES: auto b = int{};
+  // CHECK-FIXES: auto b3 = int{};
 
   // FIXME implement this case
   int bArray[1];
   // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // noCHECK-FIXES: auto bArray = int[1]{};
 
-  // auto uShort = unsigned short{}; would not be valid because unsigned short is not a "single-word type name"
+  // auto uShort = unsigned short{42}; would not be valid because unsigned short is not a "single-word type name"
   // FIXME create a warning but no autofix?
-  unsigned short uShort;
+  unsigned short uShort = 42;
 
   // Don't warn when 'auto' is already being used.
   auto aut = MyType{};

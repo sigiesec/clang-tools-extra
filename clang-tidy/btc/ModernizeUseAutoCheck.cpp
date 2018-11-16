@@ -447,17 +447,21 @@ ModernizeUseAutoCheck::handleConstructExpr(const CXXConstructExpr *Construct,
     }
   }
 
-  return {makeDefaultInitializerExpression(Context, FirstDeclType),
-          AutoDefaultInitialized};
+  return makeDefaultInitializerExpression(Context, FirstDeclType);
 }
 
-std::string ModernizeUseAutoCheck::makeDefaultInitializerExpression(
-    ASTContext *Context, const QualType &FirstDeclType) {
+std::string
+ModernizeUseAutoCheck::makeTypeString(ASTContext *Context,
+                                      const QualType &FirstDeclType) {
   const auto printingPolicy = PrintingPolicy{Context->getLangOpts()};
-  const auto TypeString =
-      FirstDeclType.withoutLocalFastQualifiers().getAsString(printingPolicy);
+  return FirstDeclType.withoutLocalFastQualifiers().getAsString(printingPolicy);
+}
 
-  return TypeString + "{}";
+ModernizeUseAutoCheck::ReplaceDeclData
+ModernizeUseAutoCheck::makeDefaultInitializerExpression(
+    ASTContext *Context, const QualType &FirstDeclType) {
+  return {makeTypeString(Context, FirstDeclType) + "{}",
+          AutoDefaultInitialized};
 }
 
 ModernizeUseAutoCheck::ReplaceDeclData
@@ -466,6 +470,14 @@ ModernizeUseAutoCheck::handleExpr(const Expr *ExprNode, ASTContext *Context,
   if (dyn_cast<ImplicitCastExpr>(ExprNode)) {
     // FIXME in this case, an explicit initialization or cast must be added
     return {};
+  }
+
+  if (dyn_cast<InitListExpr>(ExprNode)) {
+    // in this case, the type name must be added
+    return {
+        makeTypeString(Context, FirstDeclType) +
+            tooling::fixit::getText(ExprNode->getSourceRange(), *Context).str(),
+        AutoExpressionResult};
   }
 
   // TODO this is duplicated from the handling of a TemporaryObjectExpr
@@ -485,7 +497,7 @@ ModernizeUseAutoCheck::handleExpr(const Expr *ExprNode, ASTContext *Context,
 void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D,
                                         ASTContext *Context) {
   auto debug = tooling::fixit::getText(D->getSourceRange(), *Context).str();
-  if (debug.find(" sign") != std::string::npos) {
+  if (debug.find(" b2") != std::string::npos) {
     puts("");
   }
 
@@ -541,9 +553,13 @@ void ModernizeUseAutoCheck::replaceDecl(const DeclStmt *D,
       }
     }
   } else {
-    ReplaceDeclDataResult = {
-        makeDefaultInitializerExpression(Context, FirstDeclType),
-        AutoDefaultInitialized};
+    // if the type is a POD type, and there is no initializer, do not do
+    // anything, otherwise the variable would be changed to be 0-initialized
+    if (FirstDeclType.isCXX11PODType(*Context)) {
+      return;
+    }
+    ReplaceDeclDataResult =
+        makeDefaultInitializerExpression(Context, FirstDeclType);
   }
 
   assert(!ReplaceDeclDataResult.newInitializerExpression.empty());
@@ -608,8 +624,8 @@ void ModernizeUseAutoCheck::replaceExpr(
       return;
 
     if (RemoveStars) {
-      // Remove explicitly written '*' from declarations where there's more than
-      // one declaration in the declaration list.
+      // Remove explicitly written '*' from declarations where there's more
+      // than one declaration in the declaration list.
       if (Dec == *D->decl_begin())
         continue;
 
@@ -621,10 +637,10 @@ void ModernizeUseAutoCheck::replaceExpr(
     }
   }
 
-  // FIXME: There is, however, one case we can address: when the VarDecl pointee
-  // is the same as the initializer, just more CV-qualified. However, TypeLoc
-  // information is not reliable where CV qualifiers are concerned so we can't
-  // do anything about this case for now.
+  // FIXME: There is, however, one case we can address: when the VarDecl
+  // pointee is the same as the initializer, just more CV-qualified. However,
+  // TypeLoc information is not reliable where CV qualifiers are concerned so
+  // we can't do anything about this case for now.
   TypeLoc Loc = FirstDecl->getTypeSourceInfo()->getTypeLoc();
   if (!RemoveStars) {
     while (Loc.getTypeLocClass() == TypeLoc::Pointer ||
@@ -666,24 +682,24 @@ void ModernizeUseAutoCheck::check(const MatchFinder::MatchResult &Result) {
                 "duplicating the type name");
   } else if (const auto *Decl =
                  Result.Nodes.getNodeAs<DeclStmt>(DeclWithCastId)) {
-    replaceExpr(
-        Decl, Result.Context,
-        [](const Expr *Expr) {
-          return cast<ExplicitCastExpr>(Expr)->getTypeAsWritten();
-        },
-        "use auto when initializing with a cast to avoid duplicating the type "
-        "name");
+    replaceExpr(Decl, Result.Context,
+                [](const Expr *Expr) {
+                  return cast<ExplicitCastExpr>(Expr)->getTypeAsWritten();
+                },
+                "use auto when initializing with a cast to avoid duplicating "
+                "the type "
+                "name");
   } else if (const auto *Decl =
                  Result.Nodes.getNodeAs<DeclStmt>(DeclWithTemplateCastId)) {
-    replaceExpr(
-        Decl, Result.Context,
-        [](const Expr *Expr) {
-          return cast<CallExpr>(Expr->IgnoreImplicit())
-              ->getDirectCallee()
-              ->getReturnType();
-        },
-        "use auto when initializing with a template cast to avoid duplicating "
-        "the type name");
+    replaceExpr(Decl, Result.Context,
+                [](const Expr *Expr) {
+                  return cast<CallExpr>(Expr->IgnoreImplicit())
+                      ->getDirectCallee()
+                      ->getReturnType();
+                },
+                "use auto when initializing with a template cast to avoid "
+                "duplicating "
+                "the type name");
   } else if (const auto *Decl = Result.Nodes.getNodeAs<DeclStmt>(AnyDeclId)) {
     replaceDecl(Decl, Result.Context);
   } else {
