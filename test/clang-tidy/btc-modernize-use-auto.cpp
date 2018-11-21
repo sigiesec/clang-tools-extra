@@ -113,10 +113,10 @@ void auto_default_initialized() {
   // CHECK-FIXES: auto b2 = int{};
 
   int b3 = {};
-  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when initializing from an expression result
   // CHECK-FIXES: auto b3 = int{};
 
-  // FIXME implement this case
+  // FIXME implement this case? is this possible?
   int bArray[1];
   // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto when declaring a default-initialized variable
   // noCHECK-FIXES: auto bArray = int[1]{};
