@@ -144,11 +144,23 @@ void auto_non_default_initialized() {
   MyType c = MyType{42};
   // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // noCHECK-FIXES: auto c = MyType{42};
+
+  // FIXME handle implicit constructors correctly
+  MyTypeWithDefaultArguments xDefault = 42;
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto xDefault = MyTypeWithDefaultArguments{42};
 }
 
 MyType MakeMyType();
 MyType MakeMyType(int);
 MyTypeAlias MakeMyTypeAlias();
+
+namespace {
+  struct TypeInAnonymousNamespace {
+  };
+
+  TypeInAnonymousNamespace MakeTypeInAnonymousNamespace() { return TypeInAnonymousNamespace{}; }
+}
 
 void auto_initialized_from_single_function_call() {
   MyType a = MakeMyType();
@@ -163,6 +175,10 @@ void auto_initialized_from_single_function_call() {
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto a2 = MakeMyType(42);
 
+  MyType a2x(MakeMyType(42));
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto a2x = MakeMyType(42);
+
   MyTypeAlias a3 = MakeMyTypeAlias();
   // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // CHECK-FIXES: auto a3 = MakeMyTypeAlias();
@@ -174,6 +190,10 @@ void auto_initialized_from_single_function_call() {
   // FIXME create a warning but no autofix in this case? or create an autofix for auto b = MyTypeAlias{MakeMyType()};
   // do not fix if the types do not match
   MyTypeAlias b = MakeMyType();
+
+  TypeInAnonymousNamespace anonymous = MakeTypeInAnonymousNamespace();
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto anonymous = MakeTypeInAnonymousNamespace();
 }
 
 void auto_initialized_from_other_expression() {
@@ -185,6 +205,10 @@ void auto_initialized_from_other_expression() {
   long b = 4 + 5;
   // noCHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
   // noCHECK-FIXES: auto b = long{4 + 5};
+
+  int c(0);
+  // CHECK-MESSAGES: :[[@LINE-1]]:3: warning: use auto
+  // CHECK-FIXES: auto c = 0;
 }
 
 // Don't warn for parameters, both for declarations and definitions.
